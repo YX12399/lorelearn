@@ -159,7 +159,8 @@ export default function CreatePage() {
       setEpisode(data.episode);
       setStage('episode_plan');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      console.error('Story generation error:', err);
+      setError('Story generation failed. Please check your API configuration.');
       setStage('form');
     }
   };

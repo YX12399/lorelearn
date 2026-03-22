@@ -2,15 +2,14 @@ import Anthropic from '@anthropic-ai/sdk';
 import { ChildProfile, Episode, Scene } from '@/types';
 import { buildContinuityBible } from './cohesion';
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
-
 export async function generateEpisode(profile: ChildProfile): Promise<Episode> {
+  const client = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+  });
   const prompt = buildStoryPrompt(profile);
 
   const message = await client.messages.create({
-    model: 'claude-opus-4-5',
+    model: 'claude-opus-4-6',
     max_tokens: 8192,
     messages: [
       {

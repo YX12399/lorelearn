@@ -1,9 +1,5 @@
 import { fal } from '@fal-ai/client';
 
-fal.config({
-  credentials: process.env.FAL_KEY,
-});
-
 export async function generateSceneVideo(
   imageUrl: string,
   prompt: string,
@@ -14,6 +10,7 @@ export async function generateSceneVideo(
     duration?: number;
   } = {}
 ): Promise<{ videoUrl: string; endFrameUrl?: string }> {
+  fal.config({ credentials: process.env.FAL_KEY });
   const { duration = 5 } = options;
 
   const videoPrompt = `${prompt} Smooth, gentle animation. Child-friendly movement. No sudden jumps or flashes. Warm, soft lighting throughout. Consistent character appearance.`;
@@ -57,6 +54,7 @@ export async function generateMultiShotVideo(
   shots: Array<{ imageUrl: string; prompt: string; duration: number }>,
   _characterReferenceUrls?: string[]
 ): Promise<{ videoUrl: string }> {
+  fal.config({ credentials: process.env.FAL_KEY });
   // Process shots sequentially, using end frame of previous as start of next
   const videoUrls: string[] = [];
 

@@ -1,14 +1,11 @@
 import { fal } from '@fal-ai/client';
 
-fal.config({
-  credentials: process.env.FAL_KEY,
-});
-
 export async function generateSceneImage(
   prompt: string,
   characterReferenceUrl?: string,
   seed?: number
 ): Promise<{ imageUrl: string; seed: number }> {
+  fal.config({ credentials: process.env.FAL_KEY });
   const enhancedPrompt = `${prompt}. Children's animated TV show style, 2D animation, soft warm colors, child-friendly, high quality, detailed backgrounds, expressive character.`;
 
   const input: Record<string, unknown> = {
