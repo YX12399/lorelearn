@@ -4,7 +4,9 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import ProfileForm from '@/components/ProfileForm';
 import EpisodePlayer from '@/components/EpisodePlayer';
+import Storyboard, { SceneGenerationStatus } from '@/components/Storyboard';
 import { ChildProfile, Episode } from '@/types';
+import { buildSceneVideoPrompt } from '@/lib/cohesion';
 
 const LOADING_MESSAGES = [
   'Crafting your personalized story...',
@@ -123,7 +125,7 @@ function EpisodePlan({
                 Generating Episode...
               </span>
             ) : (
-              `Watch ${childName}'s Episode! 🎬`
+              `Generate ${childName}'s Episode! 🎬`
             )}
           </button>
         </div>
@@ -134,10 +136,18 @@ function EpisodePlan({
 
 export default function CreatePage() {
   const [stage, setStage] = useState<
-    'form' | 'loading_story' | 'episode_plan' | 'generating_episode' | 'playing'
+    | 'form'
+    | 'loading_story'
+    | 'episode_plan'
+    | 'generating_episode'
+    | 'generating_storyboard'
+    | 'storyboard_review'
+    | 'generating_video'
+    | 'playing'
   >('form');
   const [episode, setEpisode] = useState<Episode | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sceneStatuses, setSceneStatuses] = useState<SceneGenerationStatus[]>([]);
 
   const handleProfileSubmit = async (profile: ChildProfile) => {
     setStage('loading_story');
@@ -167,8 +177,219 @@ export default function CreatePage() {
 
   const handleGenerateEpisode = async () => {
     if (!episode) return;
+    setStage('generating_storyboard');
+
+    const voiceTone = episode.childProfile.sensoryPreferences.preferredVoiceTone;
+
+    // Initialise per-scene statuses
+    setSceneStatuses(
+      episode.scenes.map(() => ({
+        imageStatus: 'pending' as const,
+        voiceStatus: 'pending' as const,
+        videoStatus: 'pending' as const,
+      }))
+    );
+
+    // Track character reference URL locally (updated as scenes generate)
+    let characterReferenceUrl: string | undefined =
+      episode.continuityBible.characterReferenceImageUrl;
+
+    // --- Voice: launch all in parallel ---
+    const voicePromises = episode.scenes.map(async (scene, i) => {
+      setSceneStatuses(prev => {
+        const next = [...prev];
+        next[i] = { ...next[i], voiceStatus: 'generating' };
+        return next;
+      });
+      try {
+        const resp = await fetch('/api/voice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sceneId: scene.id, text: scene.narration, voiceTone }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error ?? 'Voice generation failed');
+        setEpisode(prev => {
+          if (!prev) return null;
+          const scenes = [...prev.scenes];
+          scenes[i] = {
+            ...scenes[i],
+            generatedAudio: {
+              url: data.audioUrl,
+              text: scene.narration,
+              voiceId: voiceTone,
+              duration: data.duration,
+            },
+          };
+          return { ...prev, scenes };
+        });
+        setSceneStatuses(prev => {
+          const next = [...prev];
+          next[i] = { ...next[i], voiceStatus: 'complete' };
+          return next;
+        });
+      } catch (err) {
+        console.error(`Voice error scene ${i}:`, err);
+        setSceneStatuses(prev => {
+          const next = [...prev];
+          next[i] = { ...next[i], voiceStatus: 'error' };
+          return next;
+        });
+      }
+    });
+
+    // --- Images: sequential so each can reference the previous keyframe ---
+    for (let i = 0; i < episode.scenes.length; i++) {
+      const scene = episode.scenes[i];
+      setSceneStatuses(prev => {
+        const next = [...prev];
+        next[i] = { ...next[i], imageStatus: 'generating' };
+        return next;
+      });
+      try {
+        const resp = await fetch('/api/images', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sceneId: scene.id,
+            prompt: scene.visualPrompt,
+            characterReferenceUrl,
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error ?? 'Image generation failed');
+
+        const imageUrl: string = data.imageUrl;
+        // First scene's image becomes the character reference for all subsequent scenes
+        if (i === 0) {
+          characterReferenceUrl = imageUrl;
+        }
+
+        setEpisode(prev => {
+          if (!prev) return null;
+          const scenes = [...prev.scenes];
+          scenes[i] = {
+            ...scenes[i],
+            generatedImage: {
+              url: imageUrl,
+              prompt: scene.visualPrompt,
+              seed: data.seed,
+              isCharacterReference: i === 0,
+              frameIndex: i,
+            },
+          };
+          const continuityBible =
+            i === 0
+              ? { ...prev.continuityBible, characterReferenceImageUrl: imageUrl }
+              : prev.continuityBible;
+          return { ...prev, scenes, continuityBible };
+        });
+        setSceneStatuses(prev => {
+          const next = [...prev];
+          next[i] = { ...next[i], imageStatus: 'complete' };
+          return next;
+        });
+      } catch (err) {
+        console.error(`Image error scene ${i}:`, err);
+        setSceneStatuses(prev => {
+          const next = [...prev];
+          next[i] = { ...next[i], imageStatus: 'error' };
+          return next;
+        });
+      }
+    }
+
+    // Wait for all voice narrations to finish
+    await Promise.all(voicePromises);
+
+    setStage('storyboard_review');
+  };
+
+  const handleGenerateVideo = async () => {
+    if (!episode) return;
+    setStage('generating_video');
+
+    // Snapshot the episode as it is now (all images should be set)
+    const snap = episode;
+    const characterReferenceUrl = snap.continuityBible.characterReferenceImageUrl;
+    let previousEndFrameUrl: string | undefined;
+
+    for (let i = 0; i < snap.scenes.length; i++) {
+      const scene = snap.scenes[i];
+      if (!scene.generatedImage?.url) {
+        // No image to animate — skip but don't block
+        continue;
+      }
+
+      setSceneStatuses(prev => {
+        const next = [...prev];
+        next[i] = { ...next[i], videoStatus: 'generating' };
+        return next;
+      });
+
+      const videoPrompt = buildSceneVideoPrompt(
+        scene,
+        snap.childProfile,
+        previousEndFrameUrl,
+        characterReferenceUrl
+      );
+
+      const startFrame = previousEndFrameUrl; // capture before mutation
+
+      try {
+        const resp = await fetch('/api/video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sceneId: scene.id,
+            imageUrl: scene.generatedImage.url,
+            prompt: videoPrompt,
+            startFrameUrl: startFrame,
+            characterReferenceUrls: characterReferenceUrl ? [characterReferenceUrl] : undefined,
+            duration: scene.duration,
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error ?? 'Video generation failed');
+
+        previousEndFrameUrl = data.endFrameUrl ?? scene.generatedImage.url;
+
+        setEpisode(prev => {
+          if (!prev) return null;
+          const scenes = [...prev.scenes];
+          scenes[i] = {
+            ...scenes[i],
+            generatedVideo: {
+              url: data.videoUrl,
+              duration: scene.duration,
+              startFrameUrl: startFrame,
+              endFrameUrl: data.endFrameUrl,
+              prompt: videoPrompt,
+            },
+          };
+          return { ...prev, scenes };
+        });
+        setSceneStatuses(prev => {
+          const next = [...prev];
+          next[i] = { ...next[i], videoStatus: 'complete' };
+          return next;
+        });
+      } catch (err) {
+        console.error(`Video error scene ${i}:`, err);
+        setSceneStatuses(prev => {
+          const next = [...prev];
+          next[i] = { ...next[i], videoStatus: 'error' };
+          return next;
+        });
+        // Fall back to using the image as frame reference for next scene
+        previousEndFrameUrl = scene.generatedImage.url;
+      }
+    }
+
     setStage('playing');
   };
+
+  // --- Render ---
 
   if (stage === 'loading_story') {
     return <LoadingSpinner name={episode?.childProfile.name ?? 'your child'} />;
@@ -184,11 +405,34 @@ export default function CreatePage() {
     );
   }
 
+  if (
+    (stage === 'generating_storyboard' ||
+      stage === 'storyboard_review' ||
+      stage === 'generating_video') &&
+    episode
+  ) {
+    return (
+      <Storyboard
+        episode={episode}
+        sceneStatuses={sceneStatuses}
+        mode={
+          stage === 'generating_storyboard'
+            ? 'generating'
+            : stage === 'generating_video'
+            ? 'generating_video'
+            : 'review'
+        }
+        onQuickPreview={() => setStage('playing')}
+        onGenerateVideo={handleGenerateVideo}
+      />
+    );
+  }
+
   if (stage === 'playing' && episode) {
     return (
       <EpisodePlayer
         episode={episode}
-        onComplete={() => setStage('episode_plan')}
+        onComplete={() => setStage('storyboard_review')}
       />
     );
   }
