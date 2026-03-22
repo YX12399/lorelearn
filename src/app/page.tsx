@@ -1,204 +1,235 @@
-'use client';
+import Link from 'next/link';
 
-import React, { useState } from 'react';
-import ProfileForm from '@/components/ProfileForm';
-import EpisodePlayer from '@/components/EpisodePlayer';
-import { ChildProfile, Episode } from '@/types';
-
-const LOADING_MESSAGES = [
-  'Crafting your personalized story...',
-  'Weaving in your favorite things...',
-  'Building a world just for you...',
-  'Adding magical learning moments...',
-  'Almost ready for your adventure!',
+const FEATURES = [
+  {
+    icon: '🌟',
+    title: 'Personalized Stories',
+    description:
+      'Every episode stars your child as the hero, woven with their favorite characters, colors, and interests.',
+  },
+  {
+    icon: '🧠',
+    title: 'Emotional Learning',
+    description:
+      'Built on the Zones of Regulation framework to help children identify and manage their emotions.',
+  },
+  {
+    icon: '🎨',
+    title: 'Sensory-Safe Design',
+    description:
+      'Calming colors, predictable pacing, no flashing — designed for sensory comfort.',
+  },
+  {
+    icon: '🎬',
+    title: 'AI-Generated Animation',
+    description:
+      'Each episode is uniquely created with AI images, video, and narration — no two episodes are alike.',
+  },
+  {
+    icon: '🤝',
+    title: 'Interactive Moments',
+    description:
+      'Pause-and-breathe breaks, emotion check-ins, and choice points keep children engaged and learning.',
+  },
+  {
+    icon: '📊',
+    title: 'Parent Dashboard',
+    description:
+      'Track emotional progress, create multiple profiles, and build a personalized episode library.',
+  },
 ];
 
-function LoadingSpinner({ name }: { name: string }) {
-  const [messageIndex, setMessageIndex] = useState(0);
+const ZONES = [
+  { color: 'bg-blue-300', label: 'Blue Zone', description: 'Calm, rested, bored' },
+  { color: 'bg-green-400', label: 'Green Zone', description: 'Happy, focused, ready to learn' },
+  { color: 'bg-yellow-400', label: 'Yellow Zone', description: 'Excited, frustrated, worried' },
+  { color: 'bg-red-400', label: 'Red Zone', description: 'Overwhelmed, very upset, angry' },
+];
 
-  React.useEffect(() => {
-    const interval = setInterval(() => {
-      setMessageIndex(prev => (prev + 1) % LOADING_MESSAGES.length);
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
+const HOW_STEPS = [
+  {
+    step: '1',
+    title: 'Create a Profile',
+    description:
+      "Tell us your child's name, interests, sensory preferences, and what emotional skills they're working on.",
+  },
+  {
+    step: '2',
+    title: 'Generate an Episode',
+    description:
+      'Our AI crafts a personalized story, then generates images, animation, and narration just for them.',
+  },
+  {
+    step: '3',
+    title: 'Watch and Learn',
+    description:
+      'Enjoy the episode together with interactive moments, breathing breaks, and emotion check-ins built in.',
+  },
+];
 
+export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-purple-50 flex flex-col items-center justify-center p-8">
-      <div className="bg-white rounded-3xl p-12 max-w-md w-full shadow-xl text-center">
-        <div className="mb-8">
-          <div className="relative w-24 h-24 mx-auto">
-            <div className="absolute inset-0 rounded-full border-4 border-blue-200 animate-ping" />
-            <div className="absolute inset-0 rounded-full border-4 border-t-blue-500 animate-spin" />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-3xl">✨</span>
-            </div>
+    <div className="min-h-screen bg-white">
+      {/* Nav */}
+      <nav className="bg-white border-b border-gray-100 sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">✨</span>
+            <span className="text-xl font-bold text-blue-700">LoreLearn</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Link href="/dashboard" className="text-gray-600 hover:text-blue-700 font-medium transition-colors">
+              Dashboard
+            </Link>
+            <Link
+              href="/create"
+              className="px-5 py-2 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors"
+            >
+              Create Episode
+            </Link>
           </div>
         </div>
-        <h2 className="text-2xl font-bold text-blue-700 mb-3">
-          Creating {name}&apos;s Adventure!
-        </h2>
-        <p className="text-gray-500 text-lg transition-all duration-500">
-          {LOADING_MESSAGES[messageIndex]}
-        </p>
-      </div>
-    </div>
-  );
-}
+      </nav>
 
-function EpisodePlan({ episode, onGenerateEpisode, isGenerating }: {
-  episode: Episode;
-  onGenerateEpisode: () => void;
-  isGenerating: boolean;
-}) {
-  const childName = episode.childProfile.name;
-
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-green-50 to-blue-50 py-8 px-4">
-      <div className="max-w-3xl mx-auto">
-        <div className="bg-white rounded-3xl shadow-xl p-8 mb-6">
-          <div className="text-center mb-6">
-            <div className="text-4xl mb-3">🌟</div>
-            <h1 className="text-3xl font-bold text-green-700 mb-2">{episode.title}</h1>
-            <p className="text-gray-500 text-lg">{episode.learningObjective}</p>
+      {/* Hero */}
+      <section className="bg-gradient-to-b from-blue-50 via-purple-50 to-white py-24 px-6">
+        <div className="max-w-4xl mx-auto text-center">
+          <div className="inline-flex items-center gap-2 bg-blue-100 text-blue-700 px-4 py-2 rounded-full text-sm font-semibold mb-8">
+            <span>🌈</span>
+            <span>Personalized Learning for Every Child</span>
           </div>
+          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight mb-6">
+            Where every child is the{' '}
+            <span className="text-blue-600">hero</span> of their own{' '}
+            <span className="text-purple-600">learning adventure</span>
+          </h1>
+          <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-10 leading-relaxed">
+            LoreLearn creates personalized animated episodes for autistic children — starring them,
+            featuring their interests, and teaching emotional regulation in a safe, sensory-friendly way.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link
+              href="/create"
+              className="px-8 py-4 bg-blue-600 text-white text-lg font-bold rounded-2xl hover:bg-blue-700 transition-all hover:scale-105 shadow-lg"
+            >
+              Create Your Child&apos;s First Episode ✨
+            </Link>
+            <Link
+              href="/dashboard"
+              className="px-8 py-4 bg-white text-blue-600 text-lg font-bold rounded-2xl border-2 border-blue-200 hover:border-blue-400 transition-all"
+            >
+              Go to Dashboard
+            </Link>
+          </div>
+        </div>
+      </section>
 
-          <div className="space-y-4 mb-8">
-            {episode.scenes.map((scene, index) => (
-              <div
-                key={scene.id}
-                className="flex gap-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl border border-blue-100"
-              >
-                <div className="flex-shrink-0 w-10 h-10 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold text-lg">
-                  {index + 1}
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-bold text-blue-800 mb-1">{scene.title}</h3>
-                  <p className="text-sm text-gray-600 mb-2">{scene.narration}</p>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                      scene.emotionBeat.zone === 'green' ? 'bg-green-100 text-green-700' :
-                      scene.emotionBeat.zone === 'yellow' ? 'bg-yellow-100 text-yellow-700' :
-                      scene.emotionBeat.zone === 'blue' ? 'bg-blue-100 text-blue-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
-                      {scene.emotionBeat.primaryEmotion}
-                    </span>
-                    {scene.interactiveMoment && (
-                      <span className="text-xs px-2 py-1 rounded-full bg-purple-100 text-purple-700 font-medium">
-                        Interactive
-                      </span>
-                    )}
-                  </div>
-                </div>
+      {/* Zones of Regulation */}
+      <section className="py-16 px-6 bg-white">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl font-bold text-gray-900 mb-3">Built on Zones of Regulation</h2>
+            <p className="text-gray-600 max-w-xl mx-auto">
+              Every episode is crafted around a proven emotional learning framework that helps children
+              understand and manage how their bodies and minds feel.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {ZONES.map((zone) => (
+              <div key={zone.label} className="text-center p-5 rounded-2xl border border-gray-100 shadow-sm">
+                <div className={`w-12 h-12 ${zone.color} rounded-full mx-auto mb-3`} />
+                <p className="font-bold text-gray-800 text-sm mb-1">{zone.label}</p>
+                <p className="text-gray-500 text-xs">{zone.description}</p>
               </div>
             ))}
           </div>
+        </div>
+      </section>
 
-          <p className="text-center text-gray-500 text-sm mb-6">
-            This story is uniquely crafted for {childName} and incorporates their favorite interests.
+      {/* Features */}
+      <section className="py-20 px-6 bg-gradient-to-b from-white to-blue-50">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-14">
+            <h2 className="text-3xl font-bold text-gray-900 mb-3">Everything designed with care</h2>
+            <p className="text-gray-600">
+              Every detail of LoreLearn was built with autistic children and their families in mind.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {FEATURES.map((f) => (
+              <div
+                key={f.title}
+                className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
+              >
+                <div className="text-3xl mb-3">{f.icon}</div>
+                <h3 className="font-bold text-gray-900 text-lg mb-2">{f.title}</h3>
+                <p className="text-gray-600 text-sm leading-relaxed">{f.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section className="py-20 px-6 bg-white">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-14">
+            <h2 className="text-3xl font-bold text-gray-900 mb-3">How it works</h2>
+            <p className="text-gray-600">Three simple steps to a fully personalized learning episode.</p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            {HOW_STEPS.map((s) => (
+              <div key={s.step} className="text-center">
+                <div className="w-14 h-14 bg-blue-600 text-white text-2xl font-bold rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                  {s.step}
+                </div>
+                <h3 className="font-bold text-gray-900 text-xl mb-2">{s.title}</h3>
+                <p className="text-gray-600 text-sm leading-relaxed">{s.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="py-20 px-6 bg-gradient-to-b from-blue-50 to-purple-50">
+        <div className="max-w-2xl mx-auto text-center">
+          <div className="text-5xl mb-6">🚀</div>
+          <h2 className="text-4xl font-bold text-gray-900 mb-4">
+            Ready to create your child&apos;s adventure?
+          </h2>
+          <p className="text-gray-600 text-lg mb-8">
+            It only takes a few minutes to set up a profile and generate your first personalized episode.
           </p>
-
-          <button
-            onClick={onGenerateEpisode}
-            disabled={isGenerating}
-            className="w-full py-5 px-8 bg-gradient-to-r from-green-500 to-blue-600 text-white text-xl font-bold rounded-2xl shadow-lg hover:from-green-600 hover:to-blue-700 transition-all transform hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
+          <Link
+            href="/create"
+            className="inline-block px-10 py-5 bg-blue-600 text-white text-xl font-bold rounded-2xl hover:bg-blue-700 transition-all hover:scale-105 shadow-xl"
           >
-            {isGenerating ? (
-              <span className="flex items-center justify-center gap-3">
-                <svg className="animate-spin h-6 w-6" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Generating Episode...
-              </span>
-            ) : (
-              `Watch ${childName}'s Episode! 🎬`
-            )}
-          </button>
+            Get Started — It&apos;s Free ✨
+          </Link>
         </div>
-      </div>
-    </div>
-  );
-}
+      </section>
 
-export default function Home() {
-  const [stage, setStage] = useState<'form' | 'loading_story' | 'episode_plan' | 'generating_episode' | 'playing'>('form');
-  const [episode, setEpisode] = useState<Episode | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleProfileSubmit = async (profile: ChildProfile) => {
-    setStage('loading_story');
-    setError(null);
-
-    try {
-      const response = await fetch('/api/story', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile }),
-      });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Failed to generate story');
-      }
-
-      const data = await response.json();
-      setEpisode(data.episode);
-      setStage('episode_plan');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
-      setStage('form');
-    }
-  };
-
-  const handleGenerateEpisode = async () => {
-    if (!episode) return;
-    setStage('playing');
-  };
-
-  if (stage === 'loading_story' && episode) {
-    return <LoadingSpinner name={episode.childProfile.name} />;
-  }
-
-  if (stage === 'loading_story') {
-    return <LoadingSpinner name="your child" />;
-  }
-
-  if ((stage === 'episode_plan' || stage === 'generating_episode') && episode) {
-    return (
-      <EpisodePlan
-        episode={episode}
-        onGenerateEpisode={handleGenerateEpisode}
-        isGenerating={stage === 'generating_episode'}
-      />
-    );
-  }
-
-  if (stage === 'playing' && episode) {
-    return (
-      <EpisodePlayer
-        episode={episode}
-        onComplete={() => setStage('episode_plan')}
-      />
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-purple-50">
-      {error && (
-        <div className="fixed top-4 right-4 bg-red-100 border border-red-300 text-red-700 px-6 py-3 rounded-xl shadow-lg z-50 max-w-sm">
-          <p className="font-semibold">Oops!</p>
-          <p className="text-sm">{error}</p>
-          <button
-            onClick={() => setError(null)}
-            className="mt-2 text-xs underline hover:no-underline"
-          >
-            Dismiss
-          </button>
+      {/* Footer */}
+      <footer className="bg-white border-t border-gray-100 py-8 px-6">
+        <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">✨</span>
+            <span className="font-bold text-blue-700">LoreLearn</span>
+          </div>
+          <p className="text-gray-500 text-sm">
+            Built with love for every child&apos;s unique learning journey.
+          </p>
+          <div className="flex gap-4 text-sm text-gray-500">
+            <Link href="/dashboard" className="hover:text-blue-600 transition-colors">
+              Dashboard
+            </Link>
+            <Link href="/create" className="hover:text-blue-600 transition-colors">
+              Create Episode
+            </Link>
+          </div>
         </div>
-      )}
-      <ProfileForm onSubmit={handleProfileSubmit} isLoading={false} />
+      </footer>
     </div>
   );
 }
