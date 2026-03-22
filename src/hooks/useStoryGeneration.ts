@@ -40,12 +40,24 @@ export function useStoryGeneration(): UseStoryGenerationReturn {
       setEpisode(generated);
       setStage('success');
 
-      // Persist to sessionStorage so the viewer page can load it
+      // 1. Persist to sessionStorage for immediate viewer access
       try {
         sessionStorage.setItem(`episode_${generated.id}`, JSON.stringify(generated));
       } catch {
         // quota exceeded — ignore
       }
+
+      // 2. Persist to Supabase (non-fatal — episode remains usable this session)
+      fetch('/api/episodes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          episode: generated,
+          childProfileId: profile.id,
+        }),
+      }).catch(() => {
+        // Silently ignore — user may not be authenticated yet (e.g., /create without login)
+      });
 
       return generated;
     } catch (err) {

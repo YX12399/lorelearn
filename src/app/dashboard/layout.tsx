@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase/server';
+import { signOut } from '@/lib/supabase/auth';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Overview', icon: '🏠' },
@@ -7,7 +9,12 @@ const NAV_ITEMS = [
   { href: '/dashboard/analytics', label: 'Analytics', icon: '📊' },
 ];
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const email = user?.email ?? '';
+  const initials = email ? email[0].toUpperCase() : '?';
+
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
@@ -19,6 +26,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Link>
           <p className="text-xs text-gray-400 mt-1">Parent Dashboard</p>
         </div>
+
         <nav className="flex-1 p-4 space-y-1">
           {NAV_ITEMS.map((item) => (
             <Link
@@ -31,13 +39,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Link>
           ))}
         </nav>
-        <div className="p-4 border-t border-gray-100">
+
+        <div className="p-4 space-y-3 border-t border-gray-100">
           <Link
             href="/create"
             className="flex items-center justify-center gap-2 w-full py-3 px-4 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors"
           >
             <span>+</span> New Episode
           </Link>
+
+          {/* User info + sign out */}
+          <div className="flex items-center gap-3 px-2 py-1">
+            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm flex-shrink-0">
+              {initials}
+            </div>
+            <p className="text-xs text-gray-500 truncate flex-1">{email}</p>
+            <form action={signOut}>
+              <button
+                type="submit"
+                title="Sign out"
+                className="text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
+            </form>
+          </div>
         </div>
       </aside>
 

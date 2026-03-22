@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: '**.fal.media' },
       { protocol: 'https', hostname: '**.fal.run' },
       { protocol: 'https', hostname: 'storage.googleapis.com' },
+      { protocol: 'https', hostname: '**.supabase.co' },
     ],
   },
   serverExternalPackages: ['@anthropic-ai/sdk'],

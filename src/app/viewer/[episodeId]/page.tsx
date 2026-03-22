@@ -128,17 +128,35 @@ export default function ViewerPage({ params }: PageProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load episode from sessionStorage (set by the create flow) or URL
+  // Load episode: sessionStorage first (fast), then DB fallback (persistent)
   useEffect(() => {
     const stored = sessionStorage.getItem(`episode_${episodeId}`);
     if (stored) {
       try {
         setEpisode(JSON.parse(stored));
+        setLoading(false);
+        return;
       } catch {
-        // ignore parse errors
+        // corrupt — fall through to DB
       }
     }
-    setLoading(false);
+
+    // Fall back to Supabase via API route
+    fetch(`/api/episodes/${episodeId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.episode) {
+          setEpisode(data.episode);
+          // Warm the sessionStorage cache for fast subsequent loads
+          try {
+            sessionStorage.setItem(`episode_${episodeId}`, JSON.stringify(data.episode));
+          } catch {
+            // quota — ignore
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [episodeId]);
 
   const currentScene: Scene | undefined = episode?.scenes[currentIndex];
