@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminClient } from '@/lib/supabase/admin';
+import { getAdminClient } from '@/lib/supabase/admin';
 
 const BUCKET = 'episode-assets';
 
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
 
     const storagePath = `episodes/${episodeId}/${sceneId}.mp3`;
 
-    const { error } = await adminClient.storage
+    const { error } = await getAdminClient().storage
       .from(BUCKET)
       .upload(storagePath, buffer, {
         contentType: 'audio/mpeg',
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate a long-lived signed URL (1 year)
-    const { data: signedUrlData, error: signedUrlError } = await adminClient.storage
+    const { data: signedUrlData, error: signedUrlError } = await getAdminClient().storage
       .from(BUCKET)
       .createSignedUrl(storagePath, 60 * 60 * 24 * 365);
 
