@@ -7,6 +7,7 @@ import { ChildProfile, Episode } from '@/types';
 import { buildSceneImagePrompt, buildSceneVideoPrompt, deriveSceneSeed } from '@/lib/cohesion';
 import { PROFILE_PRESETS } from '@/lib/presets';
 import { Provider, PROVIDER_LABELS } from '@/lib/providers';
+import { saveEpisodeToHistory, type SavedEpisode } from '@/lib/episode-storage';
 
 // ─── Topic Input with Profile Selector & Provider Picker ────────────────────
 function TopicInput({
@@ -128,9 +129,15 @@ function TopicInput({
           ))}
         </div>
 
-        <div className="text-center">
+        <div className="text-center flex gap-4 justify-center">
+          <a href="/profile" className="text-sm text-white/30 hover:text-white/60 transition-colors">
+            Edit profiles
+          </a>
+          <a href="/history" className="text-sm text-white/30 hover:text-white/60 transition-colors">
+            Episode history
+          </a>
           <button onClick={onChangeProfile} className="text-sm text-white/30 hover:text-white/60 transition-colors">
-            Edit profile manually
+            Full profile form
           </button>
         </div>
       </div>
@@ -218,6 +225,28 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [savedToHistory, setSavedToHistory] = useState(false);
+
+  const saveToHistory = () => {
+    const saved: SavedEpisode = {
+      id: episode.id,
+      title: episode.title,
+      topic: episode.childProfile?.learningTopic || '',
+      childName: episode.childProfile?.name || 'Unknown',
+      provider: 'fal',
+      createdAt: new Date().toISOString(),
+      thumbnail: episode.scenes[0]?.generatedImage?.url,
+      scenes: episode.scenes.map((s, i) => ({
+        index: i,
+        narration: s.narration,
+        videoUrl: s.generatedVideo?.url,
+        audioUrl: s.generatedAudio?.url,
+        imageUrl: s.generatedImage?.url,
+      })),
+    };
+    saveEpisodeToHistory(saved);
+    setSavedToHistory(true);
+  };
 
   const scenesWithVideo = episode.scenes.filter((s) => s.generatedVideo?.url);
   const scene = scenesWithVideo[currentScene];
@@ -356,9 +385,18 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
             </button>
           </div>
 
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <button onClick={onBack} className="px-6 py-2 text-white/50 hover:text-white text-sm transition-colors">New topic</button>
-            <button onClick={() => { setCurrentScene(0); setIsPlaying(false); }} className="px-6 py-2 bg-purple-500/20 text-purple-300 rounded-lg hover:bg-purple-500/30 text-sm transition-colors">Replay</button>
+            <div className="flex gap-2">
+              <button
+                onClick={saveToHistory}
+                className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${savedToHistory ? 'bg-green-500/20 text-green-300' : 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'}`}
+              >
+                {savedToHistory ? 'Saved!' : 'Save to History'}
+              </button>
+              <a href="/history" className="px-5 py-2 bg-white/10 text-white/70 rounded-lg hover:bg-white/20 text-sm transition-colors">History</a>
+              <button onClick={() => { setCurrentScene(0); setIsPlaying(false); }} className="px-5 py-2 bg-purple-500/20 text-purple-300 rounded-lg hover:bg-purple-500/30 text-sm transition-colors">Replay</button>
+            </div>
           </div>
         </div>
       </div>

@@ -78,6 +78,12 @@ export default function LandingPage() {
             <span className="text-xl font-bold text-blue-700">LoreLearn</span>
           </div>
           <div className="flex items-center gap-4">
+            <Link href="/history" className="text-gray-600 hover:text-blue-700 font-medium transition-colors">
+              History
+            </Link>
+            <Link href="/profile" className="text-gray-600 hover:text-blue-700 font-medium transition-colors">
+              Profiles
+            </Link>
             <Link href="/dashboard" className="text-gray-600 hover:text-blue-700 font-medium transition-colors">
               Dashboard
             </Link>
@@ -221,6 +227,12 @@ export default function LandingPage() {
             Built with love for every child&apos;s unique learning journey.
           </p>
           <div className="flex gap-4 text-sm text-gray-500">
+            <Link href="/history" className="hover:text-blue-600 transition-colors">
+              History
+            </Link>
+            <Link href="/profile" className="hover:text-blue-600 transition-colors">
+              Profiles
+            </Link>
             <Link href="/dashboard" className="hover:text-blue-600 transition-colors">
               Dashboard
             </Link>
