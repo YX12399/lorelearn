@@ -6,7 +6,7 @@ import ProfileForm from '@/components/ProfileForm';
 import EpisodePlayer from '@/components/EpisodePlayer';
 import Storyboard, { SceneGenerationStatus } from '@/components/Storyboard';
 import { ChildProfile, Episode } from '@/types';
-import { buildSceneVideoPrompt } from '@/lib/cohesion';
+import { buildSceneImagePrompt, buildSceneVideoPrompt, deriveSceneSeed } from '@/lib/cohesion';
 
 const LOADING_MESSAGES = [
   'Crafting your personalized story...',
@@ -21,7 +21,7 @@ function LoadingSpinner({ name }: { name: string }) {
 
   React.useEffect(() => {
     const interval = setInterval(() => {
-      setMessageIndex(prev => (prev + 1) % LOADING_MESSAGES.length);
+      setMessageIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
     }, 2000);
     return () => clearInterval(interval);
   }, []);
@@ -66,8 +66,12 @@ function EpisodePlan({
         <div className="bg-white rounded-3xl shadow-xl p-8 mb-6">
           <div className="text-center mb-6">
             <div className="text-4xl mb-3">🌟</div>
-            <h1 className="text-3xl font-bold text-green-700 mb-2">{episode.title}</h1>
-            <p className="text-gray-500 text-lg">{episode.learningObjective}</p>
+            <h1 className="text-3xl font-bold text-green-700 mb-2">
+              {episode.title}
+            </h1>
+            <p className="text-gray-500 text-lg">
+              {episode.learningObjective}
+            </p>
           </div>
 
           <div className="space-y-4 mb-8">
@@ -80,18 +84,22 @@ function EpisodePlan({
                   {index + 1}
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-bold text-blue-800 mb-1">{scene.title}</h3>
-                  <p className="text-sm text-gray-600 mb-2">{scene.narration}</p>
+                  <h3 className="font-bold text-blue-800 mb-1">
+                    {scene.title}
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-2">
+                    {scene.narration}
+                  </p>
                   <div className="flex items-center gap-2">
                     <span
                       className={`text-xs px-2 py-1 rounded-full font-medium ${
                         scene.emotionBeat.zone === 'green'
                           ? 'bg-green-100 text-green-700'
                           : scene.emotionBeat.zone === 'yellow'
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : scene.emotionBeat.zone === 'blue'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'bg-red-100 text-red-700'
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : scene.emotionBeat.zone === 'blue'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-red-100 text-red-700'
                       }`}
                     >
                       {scene.emotionBeat.primaryEmotion}
@@ -108,7 +116,8 @@ function EpisodePlan({
           </div>
 
           <p className="text-center text-gray-500 text-sm mb-6">
-            This story is uniquely crafted for {childName} and incorporates their favorite interests.
+            This story is uniquely crafted for {childName} and incorporates
+            their favorite interests.
           </p>
 
           <button
@@ -118,9 +127,24 @@ function EpisodePlan({
           >
             {isGenerating ? (
               <span className="flex items-center justify-center gap-3">
-                <svg className="animate-spin h-6 w-6" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                <svg
+                  className="animate-spin h-6 w-6"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
                 </svg>
                 Generating Episode...
               </span>
@@ -147,7 +171,9 @@ export default function CreatePage() {
   >('form');
   const [episode, setEpisode] = useState<Episode | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sceneStatuses, setSceneStatuses] = useState<SceneGenerationStatus[]>([]);
+  const [sceneStatuses, setSceneStatuses] = useState<SceneGenerationStatus[]>(
+    []
+  );
 
   const handleProfileSubmit = async (profile: ChildProfile) => {
     setStage('loading_story');
@@ -170,16 +196,26 @@ export default function CreatePage() {
       setStage('episode_plan');
     } catch (err) {
       console.error('Story generation error:', err);
-      setError('Story generation failed. Please check your API configuration.');
+      setError(
+        'Story generation failed. Please check your API configuration.'
+      );
       setStage('form');
     }
   };
 
+  /**
+   * Generate images and voice narration for all scenes.
+   * Images are generated SEQUENTIALLY so each scene can reference the
+   * first scene's image as the character style anchor.
+   * Voice narration is generated in PARALLEL for speed.
+   */
   const handleGenerateEpisode = async () => {
     if (!episode) return;
     setStage('generating_storyboard');
 
-    const voiceTone = episode.childProfile.sensoryPreferences.preferredVoiceTone;
+    const voiceTone =
+      episode.childProfile.sensoryPreferences.preferredVoiceTone;
+    const totalScenes = episode.scenes.length;
 
     // Initialise per-scene statuses
     setSceneStatuses(
@@ -190,13 +226,12 @@ export default function CreatePage() {
       }))
     );
 
-    // Track character reference URL locally (updated as scenes generate)
     let characterReferenceUrl: string | undefined =
       episode.continuityBible.characterReferenceImageUrl;
 
     // --- Voice: launch all in parallel ---
     const voicePromises = episode.scenes.map(async (scene, i) => {
-      setSceneStatuses(prev => {
+      setSceneStatuses((prev) => {
         const next = [...prev];
         next[i] = { ...next[i], voiceStatus: 'generating' };
         return next;
@@ -205,11 +240,16 @@ export default function CreatePage() {
         const resp = await fetch('/api/voice', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sceneId: scene.id, text: scene.narration, voiceTone }),
+          body: JSON.stringify({
+            sceneId: scene.id,
+            text: scene.narration,
+            voiceTone,
+          }),
         });
         const data = await resp.json();
-        if (!resp.ok) throw new Error(data.error ?? 'Voice generation failed');
-        setEpisode(prev => {
+        if (!resp.ok)
+          throw new Error(data.error ?? 'Voice generation failed');
+        setEpisode((prev) => {
           if (!prev) return null;
           const scenes = [...prev.scenes];
           scenes[i] = {
@@ -223,14 +263,14 @@ export default function CreatePage() {
           };
           return { ...prev, scenes };
         });
-        setSceneStatuses(prev => {
+        setSceneStatuses((prev) => {
           const next = [...prev];
           next[i] = { ...next[i], voiceStatus: 'complete' };
           return next;
         });
       } catch (err) {
         console.error(`Voice error scene ${i}:`, err);
-        setSceneStatuses(prev => {
+        setSceneStatuses((prev) => {
           const next = [...prev];
           next[i] = { ...next[i], voiceStatus: 'error' };
           return next;
@@ -238,60 +278,80 @@ export default function CreatePage() {
       }
     });
 
-    // --- Images: sequential so each can reference the previous keyframe ---
+    // --- Images: sequential for cohesion ---
+    // Uses buildSceneImagePrompt() for fully style-locked prompts
+    // and deriveSceneSeed() for deterministic seeds.
     for (let i = 0; i < episode.scenes.length; i++) {
       const scene = episode.scenes[i];
-      setSceneStatuses(prev => {
+      const isFirst = i === 0;
+
+      // Build a cohesion-aware prompt
+      const cohesivePrompt = buildSceneImagePrompt(
+        scene,
+        episode.childProfile,
+        i,
+        totalScenes,
+        isFirst
+      );
+      const seed = deriveSceneSeed(episode.id, i);
+
+      setSceneStatuses((prev) => {
         const next = [...prev];
         next[i] = { ...next[i], imageStatus: 'generating' };
         return next;
       });
+
       try {
         const resp = await fetch('/api/images', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             sceneId: scene.id,
-            prompt: scene.visualPrompt,
-            characterReferenceUrl,
+            prompt: cohesivePrompt,
+            characterReferenceUrl: isFirst ? undefined : characterReferenceUrl,
+            seed,
+            isFirstScene: isFirst,
           }),
         });
         const data = await resp.json();
-        if (!resp.ok) throw new Error(data.error ?? 'Image generation failed');
+        if (!resp.ok)
+          throw new Error(data.error ?? 'Image generation failed');
 
         const imageUrl: string = data.imageUrl;
-        // First scene's image becomes the character reference for all subsequent scenes
-        if (i === 0) {
+        // First scene establishes the character reference for all subsequent scenes
+        if (isFirst) {
           characterReferenceUrl = imageUrl;
         }
 
-        setEpisode(prev => {
+        setEpisode((prev) => {
           if (!prev) return null;
           const scenes = [...prev.scenes];
           scenes[i] = {
             ...scenes[i],
             generatedImage: {
               url: imageUrl,
-              prompt: scene.visualPrompt,
+              prompt: cohesivePrompt,
               seed: data.seed,
-              isCharacterReference: i === 0,
+              isCharacterReference: isFirst,
               frameIndex: i,
             },
           };
-          const continuityBible =
-            i === 0
-              ? { ...prev.continuityBible, characterReferenceImageUrl: imageUrl }
-              : prev.continuityBible;
+          const continuityBible = isFirst
+            ? {
+                ...prev.continuityBible,
+                characterReferenceImageUrl: imageUrl,
+              }
+            : prev.continuityBible;
           return { ...prev, scenes, continuityBible };
         });
-        setSceneStatuses(prev => {
+        setSceneStatuses((prev) => {
           const next = [...prev];
           next[i] = { ...next[i], imageStatus: 'complete' };
           return next;
         });
       } catch (err) {
         console.error(`Image error scene ${i}:`, err);
-        setSceneStatuses(prev => {
+        setSceneStatuses((prev) => {
           const next = [...prev];
           next[i] = { ...next[i], imageStatus: 'error' };
           return next;
@@ -305,23 +365,24 @@ export default function CreatePage() {
     setStage('storyboard_review');
   };
 
+  /**
+   * Generate animated videos for each scene.
+   * Sequential processing with end-frame chaining for visual continuity.
+   */
   const handleGenerateVideo = async () => {
     if (!episode) return;
     setStage('generating_video');
 
-    // Snapshot the episode as it is now (all images should be set)
     const snap = episode;
-    const characterReferenceUrl = snap.continuityBible.characterReferenceImageUrl;
+    const characterReferenceUrl =
+      snap.continuityBible.characterReferenceImageUrl;
     let previousEndFrameUrl: string | undefined;
 
     for (let i = 0; i < snap.scenes.length; i++) {
       const scene = snap.scenes[i];
-      if (!scene.generatedImage?.url) {
-        // No image to animate — skip but don't block
-        continue;
-      }
+      if (!scene.generatedImage?.url) continue;
 
-      setSceneStatuses(prev => {
+      setSceneStatuses((prev) => {
         const next = [...prev];
         next[i] = { ...next[i], videoStatus: 'generating' };
         return next;
@@ -334,7 +395,7 @@ export default function CreatePage() {
         characterReferenceUrl
       );
 
-      const startFrame = previousEndFrameUrl; // capture before mutation
+      const startFrame = previousEndFrameUrl;
 
       try {
         const resp = await fetch('/api/video', {
@@ -345,16 +406,21 @@ export default function CreatePage() {
             imageUrl: scene.generatedImage.url,
             prompt: videoPrompt,
             startFrameUrl: startFrame,
-            characterReferenceUrls: characterReferenceUrl ? [characterReferenceUrl] : undefined,
+            characterReferenceUrls: characterReferenceUrl
+              ? [characterReferenceUrl]
+              : undefined,
             duration: scene.duration,
           }),
         });
         const data = await resp.json();
-        if (!resp.ok) throw new Error(data.error ?? 'Video generation failed');
+        if (!resp.ok)
+          throw new Error(data.error ?? 'Video generation failed');
 
-        previousEndFrameUrl = data.endFrameUrl ?? scene.generatedImage.url;
+        // Chain: use this scene's end frame as the next scene's start reference
+        previousEndFrameUrl =
+          data.endFrameUrl ?? scene.generatedImage.url;
 
-        setEpisode(prev => {
+        setEpisode((prev) => {
           if (!prev) return null;
           const scenes = [...prev.scenes];
           scenes[i] = {
@@ -369,19 +435,19 @@ export default function CreatePage() {
           };
           return { ...prev, scenes };
         });
-        setSceneStatuses(prev => {
+        setSceneStatuses((prev) => {
           const next = [...prev];
           next[i] = { ...next[i], videoStatus: 'complete' };
           return next;
         });
       } catch (err) {
         console.error(`Video error scene ${i}:`, err);
-        setSceneStatuses(prev => {
+        setSceneStatuses((prev) => {
           const next = [...prev];
           next[i] = { ...next[i], videoStatus: 'error' };
           return next;
         });
-        // Fall back to using the image as frame reference for next scene
+        // Fallback: use this scene's image as the frame reference for next scene
         previousEndFrameUrl = scene.generatedImage.url;
       }
     }
@@ -392,10 +458,17 @@ export default function CreatePage() {
   // --- Render ---
 
   if (stage === 'loading_story') {
-    return <LoadingSpinner name={episode?.childProfile.name ?? 'your child'} />;
+    return (
+      <LoadingSpinner
+        name={episode?.childProfile.name ?? 'your child'}
+      />
+    );
   }
 
-  if ((stage === 'episode_plan' || stage === 'generating_episode') && episode) {
+  if (
+    (stage === 'episode_plan' || stage === 'generating_episode') &&
+    episode
+  ) {
     return (
       <EpisodePlan
         episode={episode}
@@ -419,8 +492,8 @@ export default function CreatePage() {
           stage === 'generating_storyboard'
             ? 'generating'
             : stage === 'generating_video'
-            ? 'generating_video'
-            : 'review'
+              ? 'generating_video'
+              : 'review'
         }
         onQuickPreview={() => setStage('playing')}
         onGenerateVideo={handleGenerateVideo}
@@ -439,11 +512,23 @@ export default function CreatePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-purple-50">
-      {/* Back nav */}
       <div className="p-4">
-        <Link href="/" className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium"
+        >
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 19l-7-7 7-7"
+            />
           </svg>
           Back to Home
         </Link>

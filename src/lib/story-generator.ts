@@ -9,7 +9,7 @@ export async function generateEpisode(profile: ChildProfile): Promise<Episode> {
   const prompt = buildStoryPrompt(profile);
 
   const message = await client.messages.create({
-    model: 'claude-opus-4-6',
+    model: 'claude-sonnet-4-20250514',
     max_tokens: 8192,
     messages: [
       {
@@ -27,9 +27,10 @@ export async function generateEpisode(profile: ChildProfile): Promise<Episode> {
 }
 
 function buildStoryPrompt(profile: ChildProfile): string {
-  const { name, age, interests, learningTopic, avatar, emotionalGoals, sensoryPreferences } = profile;
+  const { name, age, interests, learningTopic, avatar, emotionalGoals, sensoryPreferences } =
+    profile;
 
-  return `You are creating a personalized educational animated episode for an autistic child named ${name}, age ${age}.
+  return `You are creating a personalized educational animated episode for a child named ${name}, age ${age}.
 
 CHILD PROFILE:
 - Name: ${name}
@@ -48,16 +49,28 @@ CHILD PROFILE:
 
 LEARNING TOPIC: ${learningTopic}
 
-Create a 5-scene personalized animated episode where ${name} IS THE PROTAGONIST. The episode should teach about ${learningTopic} using ${name}'s personal interests as the context and setting.
+Create a 5-scene personalized animated episode where ${name} IS THE PROTAGONIST going on a learning adventure. The episode should teach about ${learningTopic} through an engaging story that uses ${name}'s personal interests as the world and context.
+
+CRITICAL VISUAL CONTINUITY RULES — each scene's visualPrompt must:
+1. Begin with the EXACT same character description: "${avatar.hairColor} ${avatar.hairStyle} hair, ${avatar.skinTone} skin, ${avatar.eyeColor} eyes, wearing ${avatar.favoriteOutfit}"
+2. Specify the SAME art style: "2D hand-drawn animated style, soft rounded shapes, watercolor backgrounds, thick gentle outlines"
+3. Describe the specific setting, pose, expression, and background for THAT scene
+4. Include at least one consistent visual anchor (e.g., a companion animal or object) that appears in every scene
+
+EPISODE STRUCTURE — think of this as a TV show episode:
+- Scene 1: Hook — ${name} discovers something intriguing about ${learningTopic}
+- Scene 2: Exploration — ${name} dives deeper, learns the first key concept
+- Scene 3: Challenge + Interactive Moment — a puzzle or question about ${learningTopic}
+- Scene 4: Breakthrough — ${name} applies what they learned
+- Scene 5: Celebration — ${name} reflects and feels proud
 
 Requirements:
-1. ${name} is the hero/protagonist of every scene
-2. Incorporate at least 3 of their personal interests naturally into the story
+1. ${name} is the hero of every scene
+2. Incorporate at least 3 of their personal interests naturally
 3. Each scene teaches something about ${learningTopic}
-4. Include Zones of Regulation emotional beats
-5. The story should be warm, encouraging, and autism-friendly
-6. Include one interactive moment (question, choice, or breathing exercise)
-7. Gentle sensory-safe pacing
+4. Include Zones of Regulation emotional beats (green → yellow → green arc)
+5. Warm, encouraging, sensory-friendly pacing
+6. One interactive moment in scene 3
 
 Respond ONLY with valid JSON in this exact format:
 {
@@ -67,7 +80,7 @@ Respond ONLY with valid JSON in this exact format:
     {
       "index": 0,
       "title": "Scene title",
-      "narration": "The warm narration text (2-3 sentences, spoken aloud)",
+      "narration": "Warm narration text (2-3 sentences, spoken aloud by narrator)",
       "dialogue": [
         {
           "speaker": "${name}",
@@ -82,7 +95,7 @@ Respond ONLY with valid JSON in this exact format:
         "intensity": 5,
         "teachingMoment": "When we feel curious, our brain is ready to learn!"
       },
-      "visualPrompt": "Detailed visual description for image generation: setting, ${name}'s pose and expression, lighting, mood, background elements. Include ${name}'s specific appearance. 2D animated children's show style.",
+      "visualPrompt": "FULL visual description starting with character appearance, then setting, pose, expression, background, mood, lighting. Must be self-contained — do not reference other scenes.",
       "transitionType": "crossfade",
       "duration": 8,
       "interactiveMoment": null
@@ -90,17 +103,17 @@ Respond ONLY with valid JSON in this exact format:
   ]
 }
 
-For the 3rd scene, include an interactiveMoment like:
+For scene 3, include an interactiveMoment:
 {
   "type": "question",
-  "prompt": "A question to ask ${name}",
+  "prompt": "A question about ${learningTopic}",
   "options": ["Option A", "Option B", "Option C"],
   "correctAnswer": "Option A",
-  "encouragement": "Great thinking!",
+  "encouragement": "Great thinking, ${name}!",
   "pauseDuration": 10
 }
 
-Make the episode magical, personal, and educational. ${name} should feel seen and celebrated.`;
+Make the episode magical, personal, and educational. ${name} should feel like the star of their own show.`;
 }
 
 function parseEpisodeResponse(text: string, profile: ChildProfile): Episode {
@@ -109,29 +122,32 @@ function parseEpisodeResponse(text: string, profile: ChildProfile): Episode {
   if (!jsonMatch) throw new Error('No JSON found in Claude response');
 
   const data = JSON.parse(jsonMatch[0]);
+  const episodeId = `episode-${Date.now()}`;
 
-  const scenes: Scene[] = data.scenes.map((s: Record<string, unknown>, index: number) => ({
-    id: `scene-${index}`,
-    index,
-    title: s.title,
-    narration: s.narration,
-    dialogue: s.dialogue || [],
-    emotionBeat: s.emotionBeat,
-    visualPrompt: s.visualPrompt,
-    interactiveMoment: s.interactiveMoment || undefined,
-    duration: (s.duration as number) || 8,
-    transitionType: s.transitionType || 'crossfade',
-  }));
+  const scenes: Scene[] = data.scenes.map(
+    (s: Record<string, unknown>, index: number) => ({
+      id: `scene-${index}`,
+      index,
+      title: s.title,
+      narration: s.narration,
+      dialogue: s.dialogue || [],
+      emotionBeat: s.emotionBeat,
+      visualPrompt: s.visualPrompt,
+      interactiveMoment: s.interactiveMoment || undefined,
+      duration: (s.duration as number) || 8,
+      transitionType: s.transitionType || 'crossfade',
+    })
+  );
 
   const episode: Episode = {
-    id: `episode-${Date.now()}`,
+    id: episodeId,
     childProfile: profile,
     title: data.title,
     learningObjective: data.learningObjective,
     scenes,
     createdAt: new Date().toISOString(),
     status: 'planning',
-    continuityBible: buildContinuityBible(scenes, profile),
+    continuityBible: buildContinuityBible(scenes, profile, undefined, episodeId),
   };
 
   return episode;

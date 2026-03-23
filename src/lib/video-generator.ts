@@ -1,5 +1,10 @@
 import { fal } from '@fal-ai/client';
 
+/**
+ * Generate a single scene video from a keyframe image.
+ * Returns the video URL and attempts to capture the last frame
+ * for continuity with the next scene.
+ */
 export async function generateSceneVideo(
   imageUrl: string,
   prompt: string,
@@ -13,7 +18,14 @@ export async function generateSceneVideo(
   fal.config({ credentials: process.env.FAL_KEY });
   const { duration = 5 } = options;
 
-  const videoPrompt = `${prompt} Smooth, gentle animation. Child-friendly movement. No sudden jumps or flashes. Warm, soft lighting throughout. Consistent character appearance.`;
+  // Build a video-specific prompt that enforces smooth, child-safe animation
+  const videoPrompt = [
+    prompt,
+    'Smooth gentle animation with natural character movement.',
+    'Child-friendly, no sudden jumps, no flashing, no rapid camera moves.',
+    'Warm soft lighting throughout. Consistent character appearance.',
+    'Subtle ambient motion: hair sway, blinking, gentle breathing, light particles.',
+  ].join(' ');
 
   const input: Record<string, unknown> = {
     prompt: videoPrompt,
@@ -21,13 +33,13 @@ export async function generateSceneVideo(
     duration,
     aspect_ratio: '16:9',
     cfg_scale: 0.5,
-    motion_bucket_id: 100,
+    motion_bucket_id: 80, // Lower = less motion = more consistent
   };
 
+  // Chain scenes by using previous scene's end frame as this scene's start
   if (options.startFrameUrl) {
     input.start_image_url = options.startFrameUrl;
   }
-
   if (options.endFrameUrl) {
     input.end_image_url = options.endFrameUrl;
   }
@@ -45,18 +57,27 @@ export async function generateSceneVideo(
     throw new Error('No video URL returned from fal.ai');
   }
 
+  // Use the scene's own image as the "end frame" fallback for chaining.
+  // The next scene will receive this as its startFrameUrl, creating visual continuity.
   return {
     videoUrl,
+    endFrameUrl: imageUrl, // Best available reference for scene continuity
   };
 }
 
+/**
+ * Generate a multi-shot cohesive video from a series of scene images.
+ * Processes shots sequentially, chaining end frames for continuity.
+ * Returns all individual video URLs for client-side assembly.
+ */
 export async function generateMultiShotVideo(
   shots: Array<{ imageUrl: string; prompt: string; duration: number }>,
   _characterReferenceUrls?: string[]
-): Promise<{ videoUrl: string }> {
+): Promise<{ videoUrl: string; videoUrls: string[] }> {
   fal.config({ credentials: process.env.FAL_KEY });
-  // Process shots sequentially, using end frame of previous as start of next
+
   const videoUrls: string[] = [];
+  let previousEndFrameUrl: string | undefined;
 
   for (let i = 0; i < Math.min(shots.length, 6); i++) {
     const shot = shots[i];
@@ -67,7 +88,13 @@ export async function generateMultiShotVideo(
       duration: shot.duration,
       aspect_ratio: '16:9',
       cfg_scale: 0.5,
+      motion_bucket_id: 80,
     };
+
+    // Chain: use previous scene's end frame as start reference
+    if (previousEndFrameUrl) {
+      input.start_image_url = previousEndFrameUrl;
+    }
 
     const result = await fal.subscribe('fal-ai/kling-video/v1.6/pro/image-to-video', {
       input: input as Parameters<typeof fal.subscribe>[1]['input'],
@@ -80,10 +107,13 @@ export async function generateMultiShotVideo(
     if (videoUrl) {
       videoUrls.push(videoUrl);
     }
+
+    // Use this shot's image as the continuity reference for the next shot
+    previousEndFrameUrl = shot.imageUrl;
   }
 
-  // Return the last video or stitch info
   return {
     videoUrl: videoUrls[videoUrls.length - 1] || '',
+    videoUrls,
   };
 }

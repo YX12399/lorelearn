@@ -77,7 +77,13 @@ export interface Episode {
   continuityBible: ContinuityBible;
 }
 
-export type EpisodeStatus = 'planning' | 'generating_images' | 'generating_video' | 'generating_voice' | 'complete' | 'error';
+export type EpisodeStatus =
+  | 'planning'
+  | 'generating_images'
+  | 'generating_video'
+  | 'generating_voice'
+  | 'complete'
+  | 'error';
 
 export interface Scene {
   id: string;
@@ -112,7 +118,12 @@ export interface EmotionBeat {
 }
 
 export interface InteractiveMoment {
-  type: 'question' | 'choice' | 'pause_and_breathe' | 'emotion_check' | 'celebration';
+  type:
+    | 'question'
+    | 'choice'
+    | 'pause_and_breathe'
+    | 'emotion_check'
+    | 'celebration';
   prompt: string;
   options?: string[];
   correctAnswer?: string;
@@ -152,6 +163,7 @@ export interface ContinuityBible {
   artStyle: string;
   sceneTransitions: SceneTransition[];
   ffmpegCommands: string[];
+  episodeSeedBase?: number;
 }
 
 export interface SceneTransition {
@@ -177,6 +189,7 @@ export interface ImageGenerationRequest {
   prompt: string;
   characterReferenceUrl?: string;
   seed?: number;
+  isFirstScene?: boolean;
 }
 
 export interface ImageGenerationResponse {

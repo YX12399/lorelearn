@@ -1,24 +1,38 @@
 import { fal } from '@fal-ai/client';
 
+/**
+ * Generate a scene image with strong style consistency.
+ *
+ * @param prompt      - The full scene prompt (should come from buildSceneImagePrompt)
+ * @param characterReferenceUrl - URL of the first scene's image for character consistency
+ * @param seed        - Deterministic seed derived from deriveSceneSeed()
+ * @param isFirstScene - If true, generate without reference (establishes the look)
+ */
 export async function generateSceneImage(
   prompt: string,
   characterReferenceUrl?: string,
-  seed?: number
+  seed?: number,
+  isFirstScene?: boolean
 ): Promise<{ imageUrl: string; seed: number }> {
   fal.config({ credentials: process.env.FAL_KEY });
-  const enhancedPrompt = `${prompt}. Children's animated TV show style, 2D animation, soft warm colors, child-friendly, high quality, detailed backgrounds, expressive character.`;
+
+  // The prompt should already include the style directive from buildSceneImagePrompt.
+  // Only add a minimal suffix for the model.
+  const enhancedPrompt = `${prompt}. High quality, detailed, professional children's animation frame.`;
 
   const input: Record<string, unknown> = {
     prompt: enhancedPrompt,
     image_size: 'landscape_16_9',
-    num_inference_steps: 28,
+    num_inference_steps: 30,
     guidance_scale: 7.5,
     ...(seed !== undefined && { seed }),
   };
 
-  if (characterReferenceUrl) {
-    input.reference_image_url = characterReferenceUrl;
-    input.reference_strength = 0.85;
+  // For subsequent scenes, use the first scene's image as a style reference.
+  // This keeps character appearance and color palette consistent.
+  if (characterReferenceUrl && !isFirstScene) {
+    input.image_url = characterReferenceUrl;
+    input.strength = 0.55; // Enough to maintain style, not so much it copies the scene
   }
 
   const result = await fal.subscribe('fal-ai/flux/dev', {
