@@ -1,30 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { getEpisodeById } from '@/lib/supabase/db/episodes';
+import { promises as fs } from 'fs';
+import path from 'path';
 
-interface RouteParams {
-  params: Promise<{ id: string }>;
+const EPISODES_DIR = '/tmp/episodes';
+
+async function ensureEpisodesDir() {
+  try {
+    await fs.mkdir(EPISODES_DIR, { recursive: true });
+  } catch (error) {
+    console.error('Failed to create episodes directory:', error);
+  }
 }
 
-export async function GET(_request: NextRequest, { params }: RouteParams) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const { id } = await params;
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const { id: episodeId } = await params;
+    const episodeFile = path.join(EPISODES_DIR, episodeId + '.json');
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const fileContent = await fs.readFile(episodeFile, 'utf-8');
+    const episode = JSON.parse(fileContent);
 
-    const episode = await getEpisodeById(id);
-    if (!episode) {
-      return NextResponse.json({ error: 'Episode not found' }, { status: 404 });
-    }
-
-    return NextResponse.json({ episode });
+    return NextResponse.json(episode);
   } catch (error) {
+    console.error('[Episodes API] Error reading episode:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch episode' },
+      { error: 'Episode not found' },
+      { status: 404 }
+    );
+  }
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: episodeId } = await params;
+    const episode = await request.json();
+
+    await ensureEpisodesDir();
+
+    const episodeFile = path.join(EPISODES_DIR, episodeId + '.json');
+    await fs.writeFile(episodeFile, JSON.stringify(episode, null, 2));
+
+    return NextResponse.json({ success: true, episodeId });
+  } catch (error) {
+    console.error('[Episodes API] Error saving episode:', error);
+    return NextResponse.json(
+      { error: 'Failed to save episode' },
       { status: 500 }
     );
   }

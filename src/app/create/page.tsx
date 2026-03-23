@@ -18,6 +18,32 @@ function getCustomPresets(): Record<string, ProfilePreset> {
 import { Provider, PROVIDER_LABELS } from '@/lib/providers';
 import { saveEpisodeToHistory, type SavedEpisode } from '@/lib/episode-storage';
 
+// Helper function to upload assets to permanent storage
+async function uploadAssetToStorage(
+  url: string,
+  type: 'image' | 'video' | 'audio',
+  episodeId: string,
+  sceneIndex: number
+): Promise<string> {
+  try {
+    const response = await fetch('/api/assets/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, type, episodeId, sceneIndex }),
+    });
+    if (response.ok) {
+      const { permanentUrl } = await response.json();
+      if (permanentUrl) {
+        console.log('[Asset Storage] Uploaded', type, 'for scene', sceneIndex);
+        return permanentUrl;
+      }
+    }
+  } catch (err) {
+    console.error('[Asset Storage] Upload failed:', err);
+  }
+  return url; // Return original URL as fallback
+}
+
 // ─── Topic Input with Profile Selector & Provider Picker ────────────────────
 function TopicInput({
   profileName,
@@ -580,10 +606,13 @@ export default function CreatePage() {
           sceneImageUrls.set(i, data.imageUrl);
           if (isFirst) characterRefUrl = data.imageUrl;
 
+          // Upload image to permanent storage
+          const permanentImageUrl = await uploadAssetToStorage(data.imageUrl, 'image', ep.id, i);
+
           setEpisode((prev) => {
             if (!prev) return null;
             const scenes = [...prev.scenes];
-            scenes[i] = { ...scenes[i], generatedImage: { url: data.imageUrl, prompt: cohesivePrompt, seed: data.seed, isCharacterReference: isFirst, frameIndex: i } };
+            scenes[i] = { ...scenes[i], generatedImage: { url: permanentImageUrl, prompt: cohesivePrompt, seed: data.seed, isCharacterReference: isFirst, frameIndex: i } };
             if (isFirst) return { ...prev, scenes, continuityBible: { ...prev.continuityBible, characterReferenceImageUrl: data.imageUrl } };
             return { ...prev, scenes };
           });
@@ -609,10 +638,12 @@ export default function CreatePage() {
           const data = await resp.json();
           if (!resp.ok) throw new Error(data.error);
 
+          const permanentAudioUrl = await uploadAssetToStorage(data.audioUrl, 'audio', ep.id, i);
+
           setEpisode((prev) => {
             if (!prev) return null;
             const scenes = [...prev.scenes];
-            scenes[i] = { ...scenes[i], generatedAudio: { url: data.audioUrl, text: scene.narration, voiceId: voiceTone, duration: data.duration } };
+            scenes[i] = { ...scenes[i], generatedAudio: { url: permanentAudioUrl, text: scene.narration, voiceId: voiceTone, duration: data.duration } };
             return { ...prev, scenes };
           });
           setSceneStatuses((prev) => { const n = [...prev]; n[i] = { ...n[i], voiceStatus: 'complete' }; return n; });
@@ -677,10 +708,13 @@ export default function CreatePage() {
             if (data.status === 'COMPLETED' && data.videoUrl) {
               pending.delete(job.sceneIndex);
               console.log(`[Pipeline] Video complete for scene ${job.sceneIndex}`);
+              // Upload video to permanent storage
+              const permanentVideoUrl = await uploadAssetToStorage(data.videoUrl, 'video', ep.id, job.sceneIndex);
+
               setEpisode((prev) => {
                 if (!prev) return null;
                 const scenes = [...prev.scenes];
-                scenes[job.sceneIndex] = { ...scenes[job.sceneIndex], generatedVideo: { url: data.videoUrl, duration: 5, prompt: 'generated' } };
+                scenes[job.sceneIndex] = { ...scenes[job.sceneIndex], generatedVideo: { url: permanentVideoUrl, duration: 5, prompt: 'generated' } };
                 return { ...prev, scenes };
               });
               setSceneStatuses((prev) => { const n = [...prev]; n[job.sceneIndex] = { ...n[job.sceneIndex], videoStatus: 'complete' }; return n; });
@@ -697,6 +731,20 @@ export default function CreatePage() {
 
       for (const idx of pending) {
         setSceneStatuses((prev) => { const n = [...prev]; n[idx] = { ...n[idx], videoStatus: 'error' }; return n; });
+      }
+
+      // Save episode with permanent asset URLs
+      if (episode) {
+        try {
+          await fetch('/api/episodes/' + episode.id, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(episode),
+          });
+          console.log('[API] Episode saved with permanent asset URLs');
+        } catch (err) {
+          console.error('[API] Failed to save episode:', err);
+        }
       }
 
       setGenStage('done');
