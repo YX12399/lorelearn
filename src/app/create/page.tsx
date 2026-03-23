@@ -5,7 +5,7 @@ import Link from 'next/link';
 import ProfileForm from '@/components/ProfileForm';
 import { ChildProfile, Episode } from '@/types';
 import { buildSceneImagePrompt, buildSceneVideoPrompt, deriveSceneSeed } from '@/lib/cohesion';
-import { PROFILE_PRESETS, ProfilePreset } from '@/lib/presets';
+import { PROFILE_PRESETS } from '@/lib/presets';
 import { Provider, PROVIDER_LABELS } from '@/lib/providers';
 
 // ─── Topic Input with Profile Selector & Provider Picker ────────────────────
@@ -48,7 +48,6 @@ function TopicInput({
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 flex flex-col items-center justify-center p-6">
       <div className="max-w-2xl w-full">
-        {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-3">
             LoreLearn
@@ -58,22 +57,17 @@ function TopicInput({
           </p>
         </div>
 
-        {/* Profile & Provider selectors */}
         <div className="flex gap-3 mb-6">
           <div className="flex-1">
             <label className="block text-xs text-white/40 mb-1.5 uppercase tracking-wider">Learner</label>
             <select
               value=""
-              onChange={(e) => {
-                if (e.target.value) onPresetSelect(e.target.value);
-              }}
+              onChange={(e) => { if (e.target.value) onPresetSelect(e.target.value); }}
               className="w-full py-2.5 px-4 bg-white/10 border border-white/20 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 appearance-none cursor-pointer"
             >
               <option value="" disabled className="bg-gray-900">{profileName} (active)</option>
               {Object.entries(PROFILE_PRESETS).map(([key, preset]) => (
-                <option key={key} value={key} className="bg-gray-900">
-                  {preset.label}
-                </option>
+                <option key={key} value={key} className="bg-gray-900">{preset.label}</option>
               ))}
             </select>
           </div>
@@ -91,7 +85,6 @@ function TopicInput({
           </div>
         </div>
 
-        {/* Topic input */}
         <form onSubmit={handleSubmit} className="mb-8">
           <div className="relative">
             <input
@@ -122,7 +115,6 @@ function TopicInput({
           </div>
         </form>
 
-        {/* Suggestion chips */}
         <div className="flex flex-wrap gap-2 justify-center mb-8">
           {suggestions.map((s) => (
             <button
@@ -137,10 +129,7 @@ function TopicInput({
         </div>
 
         <div className="text-center">
-          <button
-            onClick={onChangeProfile}
-            className="text-sm text-white/30 hover:text-white/60 transition-colors"
-          >
+          <button onClick={onChangeProfile} className="text-sm text-white/30 hover:text-white/60 transition-colors">
             Edit profile manually
           </button>
         </div>
@@ -160,17 +149,9 @@ interface SceneStatus {
 }
 
 function GenerationProgress({
-  stage,
-  topic,
-  sceneCount,
-  sceneStatuses,
-  provider,
+  stage, topic, sceneCount, sceneStatuses, provider,
 }: {
-  stage: GenerationStage;
-  topic: string;
-  sceneCount: number;
-  sceneStatuses: SceneStatus[];
-  provider: Provider;
+  stage: GenerationStage; topic: string; sceneCount: number; sceneStatuses: SceneStatus[]; provider: Provider;
 }) {
   const stages: { key: GenerationStage; label: string; icon: string }[] = [
     { key: 'story', label: 'Planning scenes (Claude)', icon: '🎬' },
@@ -191,24 +172,17 @@ function GenerationProgress({
           <h2 className="text-2xl font-bold text-white mb-2">Creating your video</h2>
           <p className="text-purple-300 text-sm">&ldquo;{topic}&rdquo;</p>
         </div>
-
         <div className="space-y-4">
           {stages.map((s, i) => {
             const isActive = i === stageIndex;
             const isDone = i < stageIndex || stage === 'done';
             return (
               <div key={s.key} className="flex items-center gap-4">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                  isDone ? 'bg-green-500 text-white' :
-                  isActive ? 'bg-purple-500 text-white animate-pulse' :
-                  'bg-white/10 text-white/30'
-                }`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${isDone ? 'bg-green-500 text-white' : isActive ? 'bg-purple-500 text-white animate-pulse' : 'bg-white/10 text-white/30'}`}>
                   {isDone ? '✓' : i + 1}
                 </div>
                 <div className="flex-1">
-                  <p className={`text-sm font-medium transition-all ${
-                    isDone ? 'text-green-400' : isActive ? 'text-white' : 'text-white/30'
-                  }`}>
+                  <p className={`text-sm font-medium transition-all ${isDone ? 'text-green-400' : isActive ? 'text-white' : 'text-white/30'}`}>
                     {s.label}
                     {isActive && s.key === 'videos' && videosTotal > 0 && (
                       <span className="ml-2 text-purple-400">({videosComplete}/{videosTotal})</span>
@@ -216,25 +190,19 @@ function GenerationProgress({
                   </p>
                 </div>
                 {isActive && (
-                  <div className="w-5 h-5">
-                    <svg className="animate-spin h-5 w-5 text-purple-400" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  </div>
+                  <svg className="animate-spin h-5 w-5 text-purple-400" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
                 )}
               </div>
             );
           })}
         </div>
-
         {stage === 'videos' && videosTotal > 0 && (
           <div className="mt-6">
             <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-500"
-                style={{ width: `${(videosComplete / videosTotal) * 100}%` }}
-              />
+              <div className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-500" style={{ width: `${(videosComplete / videosTotal) * 100}%` }} />
             </div>
           </div>
         )}
@@ -244,21 +212,15 @@ function GenerationProgress({
 }
 
 // ─── Video Player ───────────────────────────────────────────────────────────
-function VideoPlayer({
-  episode,
-  onBack,
-}: {
-  episode: Episode;
-  onBack: () => void;
-}) {
+function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void }) {
   const [currentScene, setCurrentScene] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
   const scenesWithVideo = episode.scenes.filter((s) => s.generatedVideo?.url);
-
   const scene = scenesWithVideo[currentScene];
+
   if (!scene) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white gap-4">
@@ -270,14 +232,8 @@ function VideoPlayer({
   }
 
   const playScene = () => {
-    if (videoRef.current) {
-      videoRef.current.play();
-      setIsPlaying(true);
-    }
-    if (audioRef.current && scene.generatedAudio?.url) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.play();
-    }
+    if (videoRef.current) { videoRef.current.play(); setIsPlaying(true); }
+    if (audioRef.current && scene.generatedAudio?.url) { audioRef.current.currentTime = 0; audioRef.current.play(); }
   };
 
   const handleVideoEnded = () => {
@@ -296,25 +252,12 @@ function VideoPlayer({
   return (
     <div className="min-h-screen bg-black flex flex-col">
       <div className="flex-1 relative flex items-center justify-center">
-        <video
-          ref={videoRef}
-          key={scene.generatedVideo?.url}
-          src={scene.generatedVideo?.url}
-          className="max-w-full max-h-[70vh] rounded-lg"
-          onEnded={handleVideoEnded}
-          onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
-          playsInline
-        />
-        {scene.generatedAudio?.url && (
-          <audio ref={audioRef} key={scene.generatedAudio?.url} src={scene.generatedAudio.url} />
-        )}
+        <video ref={videoRef} key={scene.generatedVideo?.url} src={scene.generatedVideo?.url} className="max-w-full max-h-[70vh] rounded-lg" onEnded={handleVideoEnded} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} playsInline />
+        {scene.generatedAudio?.url && <audio ref={audioRef} key={scene.generatedAudio?.url} src={scene.generatedAudio.url} />}
         {!isPlaying && (
           <button onClick={playScene} className="absolute inset-0 flex items-center justify-center bg-black/40">
             <div className="w-20 h-20 bg-white/20 backdrop-blur-xl rounded-full flex items-center justify-center hover:bg-white/30 transition-all">
-              <svg className="w-10 h-10 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z" />
-              </svg>
+              <svg className="w-10 h-10 text-white ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
             </div>
           </button>
         )}
@@ -324,7 +267,6 @@ function VideoPlayer({
           </div>
         </div>
       </div>
-
       <div className="bg-gradient-to-t from-black to-transparent p-6">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-4">
@@ -333,26 +275,13 @@ function VideoPlayer({
           </div>
           <div className="flex gap-2 justify-center mb-4">
             {scenesWithVideo.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => { setCurrentScene(i); setIsPlaying(false); }}
-                className={`h-1.5 rounded-full transition-all ${
-                  i === currentScene ? 'w-8 bg-purple-400' :
-                  i < currentScene ? 'w-4 bg-green-500' : 'w-4 bg-white/20'
-                }`}
-              />
+              <button key={i} onClick={() => { setCurrentScene(i); setIsPlaying(false); }}
+                className={`h-1.5 rounded-full transition-all ${i === currentScene ? 'w-8 bg-purple-400' : i < currentScene ? 'w-4 bg-green-500' : 'w-4 bg-white/20'}`} />
             ))}
           </div>
           <div className="flex justify-between">
-            <button onClick={onBack} className="px-6 py-2 text-white/50 hover:text-white text-sm transition-colors">
-              New topic
-            </button>
-            <button
-              onClick={() => { setCurrentScene(0); setIsPlaying(false); }}
-              className="px-6 py-2 bg-purple-500/20 text-purple-300 rounded-lg hover:bg-purple-500/30 text-sm transition-colors"
-            >
-              Replay
-            </button>
+            <button onClick={onBack} className="px-6 py-2 text-white/50 hover:text-white text-sm transition-colors">New topic</button>
+            <button onClick={() => { setCurrentScene(0); setIsPlaying(false); }} className="px-6 py-2 bg-purple-500/20 text-purple-300 rounded-lg hover:bg-purple-500/30 text-sm transition-colors">Replay</button>
           </div>
         </div>
       </div>
@@ -371,7 +300,6 @@ export default function CreatePage() {
   const [sceneStatuses, setSceneStatuses] = useState<SceneStatus[]>([]);
   const [provider, setProvider] = useState<Provider>('fal');
 
-  // Auto-load Sania's profile on mount
   useEffect(() => {
     const sania = PROFILE_PRESETS.sania;
     if (sania) {
@@ -383,10 +311,8 @@ export default function CreatePage() {
   const handlePresetSelect = (key: string) => {
     const preset = PROFILE_PRESETS[key];
     if (!preset) return;
-    if (key === 'custom') {
-      setProfile(null);
-      setStage('setup');
-    } else {
+    if (key === 'custom') { setProfile(null); setStage('setup'); }
+    else {
       setProfile({ ...preset.profile, id: `preset-${key}` } as Omit<ChildProfile, 'learningTopic'> & { id: string });
       setStage('topic');
     }
@@ -409,7 +335,7 @@ export default function CreatePage() {
     const fullProfile: ChildProfile = { ...profile, learningTopic: selectedTopic } as ChildProfile;
 
     try {
-      // 1. Generate story/scene plan
+      // 1. Story
       const storyResp = await fetch('/api/story', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -421,14 +347,14 @@ export default function CreatePage() {
 
       const totalScenes = ep.scenes.length;
       setSceneStatuses(ep.scenes.map(() => ({
-        imageStatus: 'pending' as const,
-        voiceStatus: 'pending' as const,
-        videoStatus: 'pending' as const,
+        imageStatus: 'pending' as const, voiceStatus: 'pending' as const, videoStatus: 'pending' as const,
       })));
 
-      // 2. Generate images (sequential for cohesion)
+      // 2. Images (sequential for cohesion)
+      // *** LOCAL tracking — never rely on React state for pipeline data ***
       setGenStage('images');
       let characterRefUrl: string | undefined;
+      const sceneImageUrls: Map<number, string> = new Map();
 
       for (let i = 0; i < ep.scenes.length; i++) {
         const scene = ep.scenes[i];
@@ -436,61 +362,41 @@ export default function CreatePage() {
         const cohesivePrompt = buildSceneImagePrompt(scene, fullProfile, i, totalScenes, isFirst);
         const seed = deriveSceneSeed(ep.id, i);
 
-        setSceneStatuses((prev) => {
-          const n = [...prev]; n[i] = { ...n[i], imageStatus: 'generating' }; return n;
-        });
+        setSceneStatuses((prev) => { const n = [...prev]; n[i] = { ...n[i], imageStatus: 'generating' }; return n; });
 
         try {
           const resp = await fetch('/api/images', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              prompt: cohesivePrompt,
-              characterReferenceUrl: isFirst ? undefined : characterRefUrl,
-              seed,
-              isFirstScene: isFirst,
-              provider,
-            }),
+            body: JSON.stringify({ prompt: cohesivePrompt, characterReferenceUrl: isFirst ? undefined : characterRefUrl, seed, isFirstScene: isFirst, provider }),
           });
           const data = await resp.json();
           if (!resp.ok) throw new Error(data.error);
 
+          // Track locally — this is the source of truth for the video step
+          sceneImageUrls.set(i, data.imageUrl);
           if (isFirst) characterRefUrl = data.imageUrl;
 
           setEpisode((prev) => {
             if (!prev) return null;
             const scenes = [...prev.scenes];
-            scenes[i] = {
-              ...scenes[i],
-              generatedImage: {
-                url: data.imageUrl, prompt: cohesivePrompt, seed: data.seed,
-                isCharacterReference: isFirst, frameIndex: i,
-              },
-            };
-            if (isFirst) {
-              return { ...prev, scenes, continuityBible: { ...prev.continuityBible, characterReferenceImageUrl: data.imageUrl } };
-            }
+            scenes[i] = { ...scenes[i], generatedImage: { url: data.imageUrl, prompt: cohesivePrompt, seed: data.seed, isCharacterReference: isFirst, frameIndex: i } };
+            if (isFirst) return { ...prev, scenes, continuityBible: { ...prev.continuityBible, characterReferenceImageUrl: data.imageUrl } };
             return { ...prev, scenes };
           });
-          setSceneStatuses((prev) => {
-            const n = [...prev]; n[i] = { ...n[i], imageStatus: 'complete' }; return n;
-          });
+          setSceneStatuses((prev) => { const n = [...prev]; n[i] = { ...n[i], imageStatus: 'complete' }; return n; });
         } catch (err) {
           console.error(`Image error scene ${i}:`, err);
-          setSceneStatuses((prev) => {
-            const n = [...prev]; n[i] = { ...n[i], imageStatus: 'error' }; return n;
-          });
+          setSceneStatuses((prev) => { const n = [...prev]; n[i] = { ...n[i], imageStatus: 'error' }; return n; });
         }
       }
 
-      // 3. Generate voices (parallel)
+      // 3. Voices (parallel)
       setGenStage('voices');
       const voiceTone = fullProfile.sensoryPreferences.preferredVoiceTone;
 
-      const voicePromises = ep.scenes.map(async (scene: typeof ep.scenes[0], i: number) => {
-        setSceneStatuses((prev) => {
-          const n = [...prev]; n[i] = { ...n[i], voiceStatus: 'generating' }; return n;
-        });
+      await Promise.all(ep.scenes.map(async (scene: typeof ep.scenes[0], i: number) => {
+        setSceneStatuses((prev) => { const n = [...prev]; n[i] = { ...n[i], voiceStatus: 'generating' }; return n; });
         try {
           const resp = await fetch('/api/voice', {
             method: 'POST',
@@ -503,118 +409,91 @@ export default function CreatePage() {
           setEpisode((prev) => {
             if (!prev) return null;
             const scenes = [...prev.scenes];
-            scenes[i] = {
-              ...scenes[i],
-              generatedAudio: { url: data.audioUrl, text: scene.narration, voiceId: voiceTone, duration: data.duration },
-            };
+            scenes[i] = { ...scenes[i], generatedAudio: { url: data.audioUrl, text: scene.narration, voiceId: voiceTone, duration: data.duration } };
             return { ...prev, scenes };
           });
-          setSceneStatuses((prev) => {
-            const n = [...prev]; n[i] = { ...n[i], voiceStatus: 'complete' }; return n;
-          });
+          setSceneStatuses((prev) => { const n = [...prev]; n[i] = { ...n[i], voiceStatus: 'complete' }; return n; });
         } catch (err) {
           console.error(`Voice error scene ${i}:`, err);
-          setSceneStatuses((prev) => {
-            const n = [...prev]; n[i] = { ...n[i], voiceStatus: 'error' }; return n;
-          });
+          setSceneStatuses((prev) => { const n = [...prev]; n[i] = { ...n[i], voiceStatus: 'error' }; return n; });
         }
-      });
+      }));
 
-      await Promise.all(voicePromises);
-
-      // 4. Submit ALL video jobs in parallel
+      // 4. Videos (parallel submit using LOCAL image URLs — no React state dependency)
       setGenStage('videos');
-
-      let latestEpisode: Episode | null = null;
-      setEpisode((prev) => { latestEpisode = prev; return prev; });
-
       const videoJobs: Array<{ sceneIndex: number; requestId: string }> = [];
 
-      if (latestEpisode) {
-        const videoSubmissions = (latestEpisode as Episode).scenes.map(async (scene: typeof ep.scenes[0], i: number) => {
-          if (!scene.generatedImage?.url) return;
+      console.log(`[Pipeline] Submitting ${sceneImageUrls.size} video jobs from ${ep.scenes.length} scenes`);
 
-          setSceneStatuses((prev) => {
-            const n = [...prev]; n[i] = { ...n[i], videoStatus: 'generating' }; return n;
+      await Promise.all(ep.scenes.map(async (scene: typeof ep.scenes[0], i: number) => {
+        const imageUrl = sceneImageUrls.get(i);
+        if (!imageUrl) {
+          console.warn(`[Pipeline] No image for scene ${i}, skipping video`);
+          return;
+        }
+
+        setSceneStatuses((prev) => { const n = [...prev]; n[i] = { ...n[i], videoStatus: 'generating' }; return n; });
+
+        const videoPrompt = buildSceneVideoPrompt(scene, fullProfile, undefined, characterRefUrl);
+
+        try {
+          const resp = await fetch('/api/video', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: 'submit', imageUrl, prompt: videoPrompt, duration: 5, provider }),
           });
+          const data = await resp.json();
+          if (!resp.ok) throw new Error(data.error);
 
-          const videoPrompt = buildSceneVideoPrompt(scene, fullProfile, undefined, characterRefUrl);
+          console.log(`[Pipeline] Video job submitted for scene ${i}: ${data.requestId}`);
+          videoJobs.push({ sceneIndex: i, requestId: data.requestId });
+          setSceneStatuses((prev) => { const n = [...prev]; n[i] = { ...n[i], videoRequestId: data.requestId }; return n; });
+        } catch (err) {
+          console.error(`Video submit error scene ${i}:`, err);
+          setSceneStatuses((prev) => { const n = [...prev]; n[i] = { ...n[i], videoStatus: 'error' }; return n; });
+        }
+      }));
 
+      // 5. Poll all video jobs until complete
+      const pending = new Set(videoJobs.map((j) => j.sceneIndex));
+      let attempts = 0;
+      const maxAttempts = 150; // ~12.5 min
+
+      console.log(`[Pipeline] Polling ${pending.size} video jobs...`);
+
+      while (pending.size > 0 && attempts < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 5000));
+        attempts++;
+
+        for (const job of videoJobs) {
+          if (!pending.has(job.sceneIndex)) continue;
           try {
-            const resp = await fetch('/api/video', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                mode: 'submit',
-                imageUrl: scene.generatedImage.url,
-                prompt: videoPrompt,
-                duration: 5,
-                provider,
-              }),
-            });
+            const resp = await fetch(`/api/video?requestId=${job.requestId}&provider=${provider}`);
             const data = await resp.json();
-            if (!resp.ok) throw new Error(data.error);
 
-            videoJobs.push({ sceneIndex: i, requestId: data.requestId });
-            setSceneStatuses((prev) => {
-              const n = [...prev]; n[i] = { ...n[i], videoRequestId: data.requestId }; return n;
-            });
-          } catch (err) {
-            console.error(`Video submit error scene ${i}:`, err);
-            setSceneStatuses((prev) => {
-              const n = [...prev]; n[i] = { ...n[i], videoStatus: 'error' }; return n;
-            });
-          }
-        });
-
-        await Promise.all(videoSubmissions);
-
-        // 5. Poll all video jobs until complete
-        const pending = new Set(videoJobs.map((j) => j.sceneIndex));
-        let attempts = 0;
-        const maxAttempts = 150;
-
-        while (pending.size > 0 && attempts < maxAttempts) {
-          await new Promise((r) => setTimeout(r, 5000));
-          attempts++;
-
-          for (const job of videoJobs) {
-            if (!pending.has(job.sceneIndex)) continue;
-            try {
-              const resp = await fetch(`/api/video?requestId=${job.requestId}&provider=${provider}`);
-              const data = await resp.json();
-
-              if (data.status === 'COMPLETED' && data.videoUrl) {
-                pending.delete(job.sceneIndex);
-                setEpisode((prev) => {
-                  if (!prev) return null;
-                  const scenes = [...prev.scenes];
-                  scenes[job.sceneIndex] = {
-                    ...scenes[job.sceneIndex],
-                    generatedVideo: { url: data.videoUrl, duration: 5, prompt: 'generated' },
-                  };
-                  return { ...prev, scenes };
-                });
-                setSceneStatuses((prev) => {
-                  const n = [...prev]; n[job.sceneIndex] = { ...n[job.sceneIndex], videoStatus: 'complete' }; return n;
-                });
-              } else if (data.status === 'FAILED') {
-                pending.delete(job.sceneIndex);
-                setSceneStatuses((prev) => {
-                  const n = [...prev]; n[job.sceneIndex] = { ...n[job.sceneIndex], videoStatus: 'error' }; return n;
-                });
-              }
-            } catch (err) {
-              console.error(`Video poll error:`, err);
+            if (data.status === 'COMPLETED' && data.videoUrl) {
+              pending.delete(job.sceneIndex);
+              console.log(`[Pipeline] Video complete for scene ${job.sceneIndex}`);
+              setEpisode((prev) => {
+                if (!prev) return null;
+                const scenes = [...prev.scenes];
+                scenes[job.sceneIndex] = { ...scenes[job.sceneIndex], generatedVideo: { url: data.videoUrl, duration: 5, prompt: 'generated' } };
+                return { ...prev, scenes };
+              });
+              setSceneStatuses((prev) => { const n = [...prev]; n[job.sceneIndex] = { ...n[job.sceneIndex], videoStatus: 'complete' }; return n; });
+            } else if (data.status === 'FAILED') {
+              pending.delete(job.sceneIndex);
+              console.error(`[Pipeline] Video FAILED for scene ${job.sceneIndex}`);
+              setSceneStatuses((prev) => { const n = [...prev]; n[job.sceneIndex] = { ...n[job.sceneIndex], videoStatus: 'error' }; return n; });
             }
+          } catch (err) {
+            console.error(`Video poll error:`, err);
           }
         }
+      }
 
-        for (const idx of pending) {
-          setSceneStatuses((prev) => {
-            const n = [...prev]; n[idx] = { ...n[idx], videoStatus: 'error' }; return n;
-          });
-        }
+      for (const idx of pending) {
+        setSceneStatuses((prev) => { const n = [...prev]; n[idx] = { ...n[idx], videoStatus: 'error' }; return n; });
       }
 
       setGenStage('done');
@@ -633,12 +512,7 @@ export default function CreatePage() {
         <div className="max-w-md bg-red-500/10 border border-red-500/30 rounded-2xl p-8 text-center">
           <p className="text-red-400 font-bold text-lg mb-2">Something went wrong</p>
           <p className="text-red-300 text-sm mb-6">{error}</p>
-          <button
-            onClick={() => { setError(null); setStage('topic'); }}
-            className="px-6 py-3 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-all"
-          >
-            Try again
-          </button>
+          <button onClick={() => { setError(null); setStage('topic'); }} className="px-6 py-3 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-all">Try again</button>
         </div>
       </div>
     );
@@ -649,9 +523,7 @@ export default function CreatePage() {
       <div className="min-h-screen bg-gradient-to-b from-blue-50 to-purple-50">
         <div className="p-4">
           <Link href="/" className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
             Back
           </Link>
         </div>
@@ -662,37 +534,16 @@ export default function CreatePage() {
 
   if (stage === 'topic') {
     return (
-      <TopicInput
-        profileName={profile.name}
-        onSubmit={handleTopicSubmit}
-        onChangeProfile={() => { setProfile(null); setStage('setup'); }}
-        isLoading={false}
-        provider={provider}
-        onProviderChange={setProvider}
-        onPresetSelect={handlePresetSelect}
-      />
+      <TopicInput profileName={profile.name} onSubmit={handleTopicSubmit} onChangeProfile={() => { setProfile(null); setStage('setup'); }} isLoading={false} provider={provider} onProviderChange={setProvider} onPresetSelect={handlePresetSelect} />
     );
   }
 
   if (stage === 'generating') {
-    return (
-      <GenerationProgress
-        stage={genStage}
-        topic={topic}
-        sceneCount={5}
-        sceneStatuses={sceneStatuses}
-        provider={provider}
-      />
-    );
+    return <GenerationProgress stage={genStage} topic={topic} sceneCount={5} sceneStatuses={sceneStatuses} provider={provider} />;
   }
 
   if (stage === 'playing' && episode) {
-    return (
-      <VideoPlayer
-        episode={episode}
-        onBack={() => { setStage('topic'); setEpisode(null); setGenStage('story'); }}
-      />
-    );
+    return <VideoPlayer episode={episode} onBack={() => { setStage('topic'); setEpisode(null); setGenStage('story'); }} />;
   }
 
   return null;
