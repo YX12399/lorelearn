@@ -191,9 +191,9 @@ interface SceneStatus {
 }
 
 function GenerationProgress({
-  stage, topic, sceneCount, sceneStatuses, provider,
+  stage, topic, sceneCount, sceneStatuses, provider, sceneTitles, sceneThumbnails,
 }: {
-  stage: GenerationStage; topic: string; sceneCount: number; sceneStatuses: SceneStatus[]; provider: Provider;
+  stage: GenerationStage; topic: string; sceneCount: number; sceneStatuses: SceneStatus[]; provider: Provider; sceneTitles?: string[]; sceneThumbnails?: (string | undefined)[];
 }) {
   const stages: { key: GenerationStage; label: string; icon: string }[] = [
     { key: 'story', label: 'Planning scenes (Claude)', icon: '🎬' },
@@ -203,36 +203,49 @@ function GenerationProgress({
   ];
 
   const stageIndex = stages.findIndex((s) => s.key === stage);
-  const videosComplete = sceneStatuses.filter((s) => s.videoStatus === 'complete').length;
-  const videosTotal = sceneStatuses.length || sceneCount;
+
+  // Calculate overall progress
+  const totalSteps = sceneStatuses.length * 3; // image + voice + video per scene
+  const completedSteps = sceneStatuses.reduce((sum, s) => {
+    return sum + (s.imageStatus === 'complete' ? 1 : 0) + (s.voiceStatus === 'complete' ? 1 : 0) + (s.videoStatus === 'complete' ? 1 : 0);
+  }, 0);
+  const overallProgress = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : (stage === 'story' ? 5 : 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 flex flex-col items-center justify-center p-6">
-      <div className="max-w-lg w-full bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-10">
+      <div className="max-w-2xl w-full bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-10">
         <div className="text-center mb-8">
           <div className="text-5xl mb-4">{stages[Math.min(stageIndex, stages.length - 1)]?.icon ?? '✨'}</div>
           <h2 className="text-2xl font-bold text-white mb-2">Creating your video</h2>
           <p className="text-purple-300 text-sm">&ldquo;{topic}&rdquo;</p>
         </div>
-        <div className="space-y-4">
+
+        {/* Overall progress bar */}
+        <div className="mb-8">
+          <div className="flex justify-between text-xs text-white/50 mb-2">
+            <span>Overall progress</span>
+            <span>{overallProgress}%</span>
+          </div>
+          <div className="h-3 bg-white/10 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-amber-400 rounded-full transition-all duration-700 ease-out" style={{ width: `${overallProgress}%` }} />
+          </div>
+        </div>
+
+        {/* Stage indicators */}
+        <div className="space-y-3 mb-8">
           {stages.map((s, i) => {
             const isActive = i === stageIndex;
             const isDone = i < stageIndex || stage === 'done';
             return (
-              <div key={s.key} className="flex items-center gap-4">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${isDone ? 'bg-green-500 text-white' : isActive ? 'bg-purple-500 text-white animate-pulse' : 'bg-white/10 text-white/30'}`}>
+              <div key={s.key} className="flex items-center gap-3">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all shrink-0 ${isDone ? 'bg-green-500 text-white' : isActive ? 'bg-purple-500 text-white animate-pulse' : 'bg-white/10 text-white/30'}`}>
                   {isDone ? '✓' : i + 1}
                 </div>
-                <div className="flex-1">
-                  <p className={`text-sm font-medium transition-all ${isDone ? 'text-green-400' : isActive ? 'text-white' : 'text-white/30'}`}>
-                    {s.label}
-                    {isActive && s.key === 'videos' && videosTotal > 0 && (
-                      <span className="ml-2 text-purple-400">({videosComplete}/{videosTotal})</span>
-                    )}
-                  </p>
-                </div>
+                <p className={`text-sm font-medium transition-all ${isDone ? 'text-green-400' : isActive ? 'text-white' : 'text-white/30'}`}>
+                  {s.label}
+                </p>
                 {isActive && (
-                  <svg className="animate-spin h-5 w-5 text-purple-400" viewBox="0 0 24 24" fill="none">
+                  <svg className="animate-spin h-4 w-4 text-purple-400 ml-auto shrink-0" viewBox="0 0 24 24" fill="none">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
@@ -241,14 +254,52 @@ function GenerationProgress({
             );
           })}
         </div>
-        {stage === 'videos' && videosTotal > 0 && (
-          <div className="mt-6">
-            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-500" style={{ width: `${(videosComplete / videosTotal) * 100}%` }} />
+
+        {/* Per-scene progress (visible once we have scene data) */}
+        {sceneStatuses.length > 0 && stage !== 'story' && (
+          <div className="border-t border-white/10 pt-6">
+            <p className="text-xs text-white/40 uppercase tracking-wider mb-3">Scene Progress</p>
+            <div className="space-y-2">
+              {sceneStatuses.map((ss, i) => {
+                const thumb = sceneThumbnails?.[i];
+                const title = sceneTitles?.[i] || `Scene ${i + 1}`;
+                return (
+                  <div key={i} className="flex items-center gap-3 bg-white/5 rounded-xl px-3 py-2">
+                    {thumb ? (
+                      <img src={thumb} alt="" className="w-10 h-7 rounded object-cover shrink-0" />
+                    ) : (
+                      <div className="w-10 h-7 rounded bg-white/10 shrink-0 flex items-center justify-center text-xs text-white/30">{i + 1}</div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-white/70 truncate">{title}</p>
+                    </div>
+                    <div className="flex gap-1.5 shrink-0">
+                      <StatusDot status={ss.imageStatus} label="img" />
+                      <StatusDot status={ss.voiceStatus} label="voice" />
+                      <StatusDot status={ss.videoStatus} label="video" />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function StatusDot({ status, label }: { status: string; label: string }) {
+  const colors: Record<string, string> = {
+    pending: 'bg-white/20',
+    generating: 'bg-yellow-400 animate-pulse',
+    complete: 'bg-green-400',
+    error: 'bg-red-400',
+  };
+  return (
+    <div className="flex flex-col items-center gap-0.5" title={`${label}: ${status}`}>
+      <div className={`w-2.5 h-2.5 rounded-full ${colors[status] || 'bg-white/20'}`} />
+      <span className="text-[9px] text-white/30">{label}</span>
     </div>
   );
 }
@@ -260,6 +311,8 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
   const [isPlaying, setIsPlaying] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [savedToHistory, setSavedToHistory] = useState(false);
+  const [stitching, setStitching] = useState(false);
+  const [stitchedUrl, setStitchedUrl] = useState<string | null>(null);
   const audioRefs = useRef<(HTMLAudioElement | null)[]>([]);
   const autoAdvanceRef = useRef(true);
 
@@ -405,6 +458,33 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
     }
   };
 
+  const stitchFullEpisode = async () => {
+    setStitching(true);
+    try {
+      const scenes = scenesWithVideo.map((s) => ({
+        videoUrl: s.generatedVideo!.url,
+        audioUrl: s.generatedAudio?.url,
+        duration: s.generatedAudio?.duration || s.generatedVideo!.duration || 5,
+      }));
+      const resp = await fetch('/api/stitch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ episodeId: episode.id, title: episode.title, scenes }),
+      });
+      const data = await resp.json();
+      if (resp.ok && data.videoUrl) {
+        setStitchedUrl(data.videoUrl);
+      } else {
+        console.error('[Stitch] Failed:', data.error);
+        alert(data.error || 'Video stitching failed. FFmpeg may not be available on this server.');
+      }
+    } catch (err) {
+      console.error('[Stitch] Error:', err);
+      alert('Video stitching failed — check console for details.');
+    }
+    setStitching(false);
+  };
+
   const downloadAll = async () => {
     setDownloading(true);
     for (let i = 0; i < scenesWithVideo.length; i++) {
@@ -494,6 +574,42 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
               {downloading ? 'Downloading...' : 'All Scenes'}
             </button>
+          </div>
+
+          {/* Full Episode Stitch */}
+          <div className="flex gap-2 justify-center mb-4">
+            {stitchedUrl ? (
+              <a
+                href={stitchedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-5 py-2.5 bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-300 rounded-lg hover:from-green-500/40 hover:to-emerald-500/40 text-sm transition-colors flex items-center gap-2 font-medium"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                Watch Full Episode
+              </a>
+            ) : (
+              <button
+                onClick={stitchFullEpisode}
+                disabled={stitching}
+                className="px-5 py-2.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-300 rounded-lg hover:from-amber-500/30 hover:to-orange-500/30 text-sm transition-colors flex items-center gap-2 font-medium disabled:opacity-50"
+              >
+                {stitching ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Stitching full episode...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V20M17 4V20M3 8H7M17 8H21M3 12H21M3 16H7M17 16H21M4 20H20C20.5523 20 21 19.5523 21 19V5C21 4.44772 20.5523 4 20 4H4C3.44772 4 3 4.44772 3 5V19C3 19.5523 3.44772 20 4 20Z" /></svg>
+                    Stitch Full Episode
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           <div className="flex justify-between items-center">
@@ -623,9 +739,10 @@ export default function CreatePage() {
         }
       }
 
-      // 3. Voices (parallel)
+      // 3. Voices (parallel) — generate BEFORE videos so we know narration duration
       setGenStage('voices');
       const voiceTone = fullProfile.sensoryPreferences.preferredVoiceTone;
+      const sceneAudioDurations: Map<number, number> = new Map();
 
       await Promise.all(ep.scenes.map(async (scene: typeof ep.scenes[0], i: number) => {
         setSceneStatuses((prev) => { const n = [...prev]; n[i] = { ...n[i], voiceStatus: 'generating' }; return n; });
@@ -637,6 +754,10 @@ export default function CreatePage() {
           });
           const data = await resp.json();
           if (!resp.ok) throw new Error(data.error);
+
+          // Track audio duration locally for video sync
+          sceneAudioDurations.set(i, data.duration);
+          console.log(`[Pipeline] Voice scene ${i}: ${data.duration}s`);
 
           const permanentAudioUrl = await uploadAssetToStorage(data.audioUrl, 'audio', ep.id, i);
 
@@ -653,7 +774,7 @@ export default function CreatePage() {
         }
       }));
 
-      // 4. Videos (parallel submit using LOCAL image URLs — no React state dependency)
+      // 4. Videos (parallel submit — duration synced to narration length)
       setGenStage('videos');
       const videoJobs: Array<{ sceneIndex: number; requestId: string }> = [];
 
@@ -670,11 +791,17 @@ export default function CreatePage() {
 
         const videoPrompt = buildSceneVideoPrompt(scene, fullProfile, undefined, characterRefUrl);
 
+        // Choose video duration based on narration length
+        // Kling supports 5s or 10s — pick 10s if narration > 7 seconds
+        const audioDuration = sceneAudioDurations.get(i) || 5;
+        const videoDuration = audioDuration > 7 ? 10 : 5;
+        console.log(`[Pipeline] Scene ${i}: audio ${audioDuration}s → video ${videoDuration}s`);
+
         try {
           const resp = await fetch('/api/video', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode: 'submit', imageUrl, prompt: videoPrompt, duration: 5, provider }),
+            body: JSON.stringify({ mode: 'submit', imageUrl, prompt: videoPrompt, duration: videoDuration, provider }),
           });
           const data = await resp.json();
           if (!resp.ok) throw new Error(data.error);
@@ -733,18 +860,21 @@ export default function CreatePage() {
         setSceneStatuses((prev) => { const n = [...prev]; n[idx] = { ...n[idx], videoStatus: 'error' }; return n; });
       }
 
-      // Save episode with permanent asset URLs
-      if (episode) {
-        try {
-          await fetch('/api/episodes/' + episode.id, {
+      // Save episode with permanent asset URLs (use ep.id since React state may be stale)
+      try {
+        // Get the latest episode state by reading from the setter
+        let latestEpisode: Episode | null = null;
+        setEpisode((prev) => { latestEpisode = prev; return prev; });
+        if (latestEpisode) {
+          await fetch('/api/episodes/' + ep.id, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(episode),
+            body: JSON.stringify(latestEpisode),
           });
           console.log('[API] Episode saved with permanent asset URLs');
-        } catch (err) {
-          console.error('[API] Failed to save episode:', err);
         }
+      } catch (err) {
+        console.error('[API] Failed to save episode:', err);
       }
 
       setGenStage('done');
@@ -790,7 +920,7 @@ export default function CreatePage() {
   }
 
   if (stage === 'generating') {
-    return <GenerationProgress stage={genStage} topic={topic} sceneCount={5} sceneStatuses={sceneStatuses} provider={provider} />;
+    return <GenerationProgress stage={genStage} topic={topic} sceneCount={5} sceneStatuses={sceneStatuses} provider={provider} sceneTitles={episode?.scenes.map(s => s.title)} sceneThumbnails={episode?.scenes.map(s => s.generatedImage?.url)} />;
   }
 
   if (stage === 'playing' && episode) {
