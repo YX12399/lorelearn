@@ -20,16 +20,18 @@ export function deriveSceneSeed(episodeId: string, sceneIndex: number): number {
 export function buildStyleDirective(profile: ChildProfile): string {
   const palette = buildColorPalette(profile);
   const lighting = profile.sensoryPreferences.prefersDimColors
-    ? 'soft diffused lighting, gentle shadows, low contrast, pastel tones'
-    : 'warm natural lighting, gentle golden-hour highlights, soft ambient glow';
+    ? 'soft diffused volumetric lighting, gentle shadows, low contrast, pastel tones'
+    : 'warm cinematic golden-hour lighting, soft volumetric rays, ambient glow with subtle rim lighting';
 
   return [
-    'STYLE LOCK: 2D hand-drawn animated style inspired by Studio Ghibli and Pixar shorts.',
-    'Soft rounded character shapes, thick gentle outlines, watercolor-textured backgrounds.',
-    `Color palette limited to: ${palette.join(', ')}.`,
+    'STYLE: High-quality cinematic anime animation, inspired by Studio Ghibli films (Spirited Away, Ponyo) and modern Pixar quality.',
+    'Rich detailed backgrounds with depth-of-field blur. Lush painted environments with atmospheric perspective.',
+    'Characters drawn with expressive large eyes, smooth cel-shaded rendering, vibrant colors, clean linework.',
+    `Color palette: ${palette.join(', ')} with rich saturation and luminous highlights.`,
     `Lighting: ${lighting}.`,
-    'NO photorealism. NO 3D render. NO harsh shadows or high contrast.',
-    'Consistent flat shading across all scenes. Same line weight throughout.',
+    'Quality: masterpiece, best quality, ultra-detailed, beautiful, cinematic composition.',
+    'Consistent character design across all scenes — same proportions, outfit, features.',
+    'Widescreen 16:9 cinematic framing. No text. No watermarks. No UI elements.',
   ].join(' ');
 }
 
@@ -69,15 +71,15 @@ export function buildContinuityBible(
 export function buildCharacterDescription(profile: ChildProfile): string {
   const { avatar, name } = profile;
   return [
-    `${name} is the main character.`,
+    `${name} is the main character — a ${profile.age}-year-old child.`,
     `Appearance: ${avatar.hairColor} ${avatar.hairStyle} hair, ${avatar.skinTone} skin, ${avatar.eyeColor} eyes.`,
     `Outfit: ${avatar.favoriteOutfit}.`,
     avatar.distinguishingFeatures.length > 0
       ? `Distinguishing features: ${avatar.distinguishingFeatures.join(', ')}.`
       : '',
-    'Draw with soft rounded features, large expressive eyes, friendly warm expression.',
-    'Character proportions: slightly chibi with a large head, small body — approachable and child-friendly.',
-    'IMPORTANT: Character must look IDENTICAL in every scene — same outfit, same hair, same features.',
+    'Anime art style: large expressive eyes with detailed iris highlights, soft rounded features, warm friendly expression.',
+    'Character proportions: cute anime child proportions with a slightly large head, detailed hair with highlights and movement.',
+    'CRITICAL: Character must look IDENTICAL in every scene — same outfit, same hair color and style, same features, same proportions.',
   ]
     .filter(Boolean)
     .join(' ');
@@ -137,20 +139,22 @@ export function buildSceneVideoPrompt(
   const emotionDesc = `${scene.emotionBeat.primaryEmotion} emotion, ${scene.emotionBeat.zone} zone`;
 
   const parts = [
-    `Animated children's show scene. ${characterDesc}`,
+    `High-quality cinematic anime animation scene. ${characterDesc}`,
     `Scene: ${scene.title}.`,
     `${scene.narration}`,
     `Character showing ${emotionDesc}.`,
     `Visual: ${scene.visualPrompt}`,
-    'Animation: smooth, slow, gentle movements appropriate for children.',
-    'Camera: slow pan or slight zoom, NO jerky movements, NO sudden cuts.',
-    'Color palette: warm, soft, child-friendly. NO flashing lights.',
-    'Character blinks gently and makes small natural movements.',
+    'Animation: smooth fluid motion, cinematic quality, detailed character animation with natural movements.',
+    'Camera: cinematic slow pan or gentle zoom with parallax depth. Smooth, elegant camera work.',
+    'Atmospheric effects: subtle particle effects, soft light rays, gentle wind in hair and clothes.',
+    'Color palette: rich vibrant anime colors with luminous highlights and soft ambient occlusion.',
+    'Character animates naturally — breathing, blinking, gentle expressions, hair and cloth physics.',
+    'Quality: masterpiece animation, Studio Ghibli level, beautiful detailed movement.',
   ];
 
   if (previousEndFrameUrl) {
     parts.push(
-      'CONTINUITY: Maintain exact visual style from previous scene. Same character, same colors, same art style.'
+      'CONTINUITY: Maintain exact visual style, character design, and color grading from previous scene.'
     );
   }
 

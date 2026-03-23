@@ -5,7 +5,16 @@ import Link from 'next/link';
 import ProfileForm from '@/components/ProfileForm';
 import { ChildProfile, Episode } from '@/types';
 import { buildSceneImagePrompt, buildSceneVideoPrompt, deriveSceneSeed } from '@/lib/cohesion';
-import { PROFILE_PRESETS } from '@/lib/presets';
+import { PROFILE_PRESETS, type ProfilePreset } from '@/lib/presets';
+
+const CUSTOM_PRESETS_KEY = 'lorelearn_custom_presets';
+function getCustomPresets(): Record<string, ProfilePreset> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(CUSTOM_PRESETS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
 import { Provider, PROVIDER_LABELS } from '@/lib/providers';
 import { saveEpisodeToHistory, type SavedEpisode } from '@/lib/episode-storage';
 
@@ -67,7 +76,7 @@ function TopicInput({
               className="w-full py-2.5 px-4 bg-white/10 border border-white/20 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 appearance-none cursor-pointer"
             >
               <option value="" disabled className="bg-gray-900">{profileName} (active)</option>
-              {Object.entries(PROFILE_PRESETS).map(([key, preset]) => (
+              {Object.entries({ ...PROFILE_PRESETS, ...getCustomPresets() }).map(([key, preset]) => (
                 <option key={key} value={key} className="bg-gray-900">{preset.label}</option>
               ))}
             </select>
@@ -222,10 +231,42 @@ function GenerationProgress({
 function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void }) {
   const [currentScene, setCurrentScene] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [savedToHistory, setSavedToHistory] = useState(false);
+  const audioRefs = useRef<(HTMLAudioElement | null)[]>([]);
+  const autoAdvanceRef = useRef(true);
+
+  const scenesWithVideo = episode.scenes.filter((s) => s.generatedVideo?.url);
+  const scene = scenesWithVideo[currentScene];
+
+  // Pre-load all audio elements
+  useEffect(() => {
+    audioRefs.current = scenesWithVideo.map((s) => {
+      if (!s.generatedAudio?.url) return null;
+      const audio = new Audio(s.generatedAudio.url);
+      audio.preload = 'auto';
+      return audio;
+    });
+    return () => {
+      audioRefs.current.forEach((a) => { if (a) { a.pause(); a.src = ''; } });
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [episode.id]);
+
+  // When scene changes, sync audio
+  useEffect(() => {
+    // Pause all other audio
+    audioRefs.current.forEach((a, i) => {
+      if (a && i !== currentScene) { a.pause(); a.currentTime = 0; }
+    });
+    // If we're playing, start the new scene's audio
+    if (isPlaying) {
+      const audio = audioRefs.current[currentScene];
+      if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentScene]);
 
   const saveToHistory = () => {
     const saved: SavedEpisode = {
@@ -248,9 +289,6 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
     setSavedToHistory(true);
   };
 
-  const scenesWithVideo = episode.scenes.filter((s) => s.generatedVideo?.url);
-  const scene = scenesWithVideo[currentScene];
-
   if (!scene) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white gap-4">
@@ -262,21 +300,64 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
   }
 
   const playScene = () => {
-    if (videoRef.current) { videoRef.current.play(); setIsPlaying(true); }
-    if (audioRef.current && scene.generatedAudio?.url) { audioRef.current.currentTime = 0; audioRef.current.play(); }
+    setIsPlaying(true);
+    if (videoRef.current) videoRef.current.play().catch(() => {});
+    const audio = audioRefs.current[currentScene];
+    if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
+  };
+
+  const pauseScene = () => {
+    setIsPlaying(false);
+    if (videoRef.current) videoRef.current.pause();
+    const audio = audioRefs.current[currentScene];
+    if (audio) audio.pause();
   };
 
   const handleVideoEnded = () => {
+    // Check if narration for this scene is still playing
+    const audio = audioRefs.current[currentScene];
+    const narrationStillPlaying = audio && !audio.paused && !audio.ended;
+
+    if (narrationStillPlaying) {
+      // Loop the video until narration finishes
+      if (videoRef.current) {
+        videoRef.current.currentTime = Math.max(0, (videoRef.current.duration || 5) - 2);
+        videoRef.current.play().catch(() => {});
+      }
+      // Set up a listener for when narration ends to auto-advance
+      const onNarrationEnd = () => {
+        audio.removeEventListener('ended', onNarrationEnd);
+        advanceToNextScene();
+      };
+      audio.addEventListener('ended', onNarrationEnd);
+    } else {
+      // Narration done or no narration — advance immediately
+      advanceToNextScene();
+    }
+  };
+
+  const advanceToNextScene = () => {
+    if (!autoAdvanceRef.current) return;
     if (currentScene < scenesWithVideo.length - 1) {
-      setCurrentScene((prev) => prev + 1);
-      setIsPlaying(false);
+      const nextIdx = currentScene + 1;
+      setCurrentScene(nextIdx);
       setTimeout(() => {
-        if (videoRef.current) { videoRef.current.play(); setIsPlaying(true); }
-        if (audioRef.current) { audioRef.current.currentTime = 0; audioRef.current.play(); }
-      }, 300);
+        if (videoRef.current) videoRef.current.play().catch(() => {});
+        const nextAudio = audioRefs.current[nextIdx];
+        if (nextAudio) { nextAudio.currentTime = 0; nextAudio.play().catch(() => {}); }
+      }, 200);
     } else {
       setIsPlaying(false);
     }
+  };
+
+  const goToScene = (idx: number) => {
+    autoAdvanceRef.current = true;
+    // Stop current audio
+    const curAudio = audioRefs.current[currentScene];
+    if (curAudio) { curAudio.pause(); curAudio.currentTime = 0; }
+    setCurrentScene(idx);
+    setIsPlaying(false);
   };
 
   const downloadScene = async (sceneIdx: number) => {
@@ -330,12 +411,16 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
     <div className="min-h-screen bg-black flex flex-col">
       <div className="flex-1 relative flex items-center justify-center">
         <video ref={videoRef} key={scene.generatedVideo?.url} src={scene.generatedVideo?.url} className="max-w-full max-h-[70vh] rounded-lg" onEnded={handleVideoEnded} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} playsInline />
-        {scene.generatedAudio?.url && <audio ref={audioRef} key={scene.generatedAudio?.url} src={scene.generatedAudio.url} />}
         {!isPlaying && (
           <button onClick={playScene} className="absolute inset-0 flex items-center justify-center bg-black/40">
             <div className="w-20 h-20 bg-white/20 backdrop-blur-xl rounded-full flex items-center justify-center hover:bg-white/30 transition-all">
               <svg className="w-10 h-10 text-white ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
             </div>
+          </button>
+        )}
+        {isPlaying && (
+          <button onClick={pauseScene} className="absolute top-4 right-4 w-10 h-10 bg-black/50 backdrop-blur rounded-full flex items-center justify-center hover:bg-black/70 transition-all">
+            <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
           </button>
         )}
         <div className="absolute bottom-4 left-4 right-4">
@@ -352,13 +437,13 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
           </div>
           <div className="flex gap-2 justify-center mb-4">
             {scenesWithVideo.map((_, i) => (
-              <button key={i} onClick={() => { setCurrentScene(i); setIsPlaying(false); }}
+              <button key={i} onClick={() => goToScene(i)}
                 className={`h-1.5 rounded-full transition-all ${i === currentScene ? 'w-8 bg-purple-400' : i < currentScene ? 'w-4 bg-green-500' : 'w-4 bg-white/20'}`} />
             ))}
           </div>
 
           {/* Download controls */}
-          <div className="flex gap-2 justify-center mb-4">
+          <div className="flex gap-2 justify-center mb-4 flex-wrap">
             <button
               onClick={() => downloadScene(currentScene)}
               className="px-4 py-2 bg-blue-500/20 text-blue-300 rounded-lg hover:bg-blue-500/30 text-sm transition-colors flex items-center gap-2"
@@ -395,7 +480,7 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
                 {savedToHistory ? 'Saved!' : 'Save to History'}
               </button>
               <a href="/history" className="px-5 py-2 bg-white/10 text-white/70 rounded-lg hover:bg-white/20 text-sm transition-colors">History</a>
-              <button onClick={() => { setCurrentScene(0); setIsPlaying(false); }} className="px-5 py-2 bg-purple-500/20 text-purple-300 rounded-lg hover:bg-purple-500/30 text-sm transition-colors">Replay</button>
+              <button onClick={() => { goToScene(0); }} className="px-5 py-2 bg-purple-500/20 text-purple-300 rounded-lg hover:bg-purple-500/30 text-sm transition-colors">Replay</button>
             </div>
           </div>
         </div>
@@ -416,7 +501,9 @@ export default function CreatePage() {
   const [provider, setProvider] = useState<Provider>('fal');
 
   useEffect(() => {
-    const sania = PROFILE_PRESETS.sania;
+    // Prefer custom profile from localStorage (edited via Profile Editor) over hardcoded preset
+    const customPresets = getCustomPresets();
+    const sania = customPresets['sania'] || PROFILE_PRESETS.sania;
     if (sania) {
       setProfile({ ...sania.profile, id: 'preset-sania' } as Omit<ChildProfile, 'learningTopic'> & { id: string });
       setStage('topic');
@@ -424,7 +511,8 @@ export default function CreatePage() {
   }, []);
 
   const handlePresetSelect = (key: string) => {
-    const preset = PROFILE_PRESETS[key];
+    const allPresets = { ...PROFILE_PRESETS, ...getCustomPresets() };
+    const preset = allPresets[key];
     if (!preset) return;
     if (key === 'custom') { setProfile(null); setStage('setup'); }
     else {
