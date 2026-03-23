@@ -1,20 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { submitVideoJob, checkVideoStatus, generateSceneVideo } from '@/lib/video-generator';
+import {
+  submitVideoJob as falSubmit,
+  checkVideoStatus as falCheck,
+  generateSceneVideo as falGenerate,
+} from '@/lib/video-generator';
+import {
+  submitVideoJob as googleSubmit,
+  checkVideoStatus as googleCheck,
+  generateSceneVideo as googleGenerate,
+} from '@/lib/google-video-generator';
 import { VideoGenerationRequest } from '@/types';
 
-// Allow up to 5 minutes for video generation (requires Vercel Pro; hobby max is 60s)
 export const maxDuration = 300;
 
 /**
  * POST /api/video
  * Two modes:
- *   - { mode: "submit", imageUrl, prompt } → returns { requestId } immediately
- *   - { imageUrl, prompt } (no mode) → blocking call, returns { videoUrl } when done
+ *   - { mode: "submit", imageUrl, prompt, provider? } → returns { requestId }
+ *   - { imageUrl, prompt, provider? } → blocking, returns { videoUrl }
  */
 export async function POST(request: NextRequest) {
   try {
-    const body: VideoGenerationRequest & { mode?: string } = await request.json();
-    const { imageUrl, prompt, duration, mode } = body;
+    const body: VideoGenerationRequest & { mode?: string; provider?: string } =
+      await request.json();
+    const { imageUrl, prompt, duration, mode, provider } = body;
 
     if (!imageUrl || !prompt) {
       return NextResponse.json(
@@ -23,14 +32,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Queue mode: submit and return immediately with request ID
+    const isGoogle = provider === 'google';
+
     if (mode === 'submit') {
-      const { requestId } = await submitVideoJob(imageUrl, prompt, { duration });
+      const submit = isGoogle ? googleSubmit : falSubmit;
+      const { requestId } = await submit(imageUrl, prompt, { duration });
       return NextResponse.json({ requestId, status: 'QUEUED' });
     }
 
-    // Blocking mode: wait for completion (may timeout on hobby plan)
-    const result = await generateSceneVideo(imageUrl, prompt, { duration });
+    const generate = isGoogle ? googleGenerate : falGenerate;
+    const result = await generate(imageUrl, prompt, { duration });
     return NextResponse.json(result);
   } catch (error) {
     console.error('Video generation error:', error);
@@ -45,17 +56,19 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * GET /api/video?requestId=xxx
- * Poll for video generation status
+ * GET /api/video?requestId=xxx&provider=fal|google
  */
 export async function GET(request: NextRequest) {
   try {
     const requestId = request.nextUrl.searchParams.get('requestId');
+    const provider = request.nextUrl.searchParams.get('provider');
+
     if (!requestId) {
       return NextResponse.json({ error: 'requestId required' }, { status: 400 });
     }
 
-    const result = await checkVideoStatus(requestId);
+    const check = provider === 'google' ? googleCheck : falCheck;
+    const result = await check(requestId);
     return NextResponse.json(result);
   } catch (error) {
     console.error('Video status check error:', error);

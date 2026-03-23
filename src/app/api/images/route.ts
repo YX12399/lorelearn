@@ -1,24 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateSceneImage } from '@/lib/image-generator';
+import { generateSceneImage as falImage } from '@/lib/image-generator';
+import { generateSceneImage as googleImage } from '@/lib/google-image-generator';
 import { ImageGenerationRequest } from '@/types';
 
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
-    const body: ImageGenerationRequest = await request.json();
-    const { prompt, characterReferenceUrl, seed, isFirstScene } = body;
+    const body: ImageGenerationRequest & { provider?: string } = await request.json();
+    const { prompt, characterReferenceUrl, seed, isFirstScene, provider } = body;
 
     if (!prompt) {
       return NextResponse.json({ error: 'Prompt required' }, { status: 400 });
     }
 
-    const result = await generateSceneImage(
-      prompt,
-      characterReferenceUrl,
-      seed,
-      isFirstScene
-    );
+    const gen = provider === 'google' ? googleImage : falImage;
+    const result = await gen(prompt, characterReferenceUrl, seed, isFirstScene);
 
     return NextResponse.json(result);
   } catch (error) {

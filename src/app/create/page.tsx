@@ -1,28 +1,30 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import ProfileForm from '@/components/ProfileForm';
 import { ChildProfile, Episode } from '@/types';
 import { buildSceneImagePrompt, buildSceneVideoPrompt, deriveSceneSeed } from '@/lib/cohesion';
+import { PROFILE_PRESETS, ProfilePreset } from '@/lib/presets';
+import { Provider, PROVIDER_LABELS } from '@/lib/providers';
 
-// ─── Saved Profile Hook (React state, no localStorage) ────────────────────
-function useSavedProfile() {
-  const [profile, setProfile] = useState<Omit<ChildProfile, 'learningTopic'> | null>(null);
-  return { profile, setProfile };
-}
-
-// ─── Topic Input ────────────────────────────────────────────────────────────
+// ─── Topic Input with Profile Selector & Provider Picker ────────────────────
 function TopicInput({
   profileName,
   onSubmit,
   onChangeProfile,
   isLoading,
+  provider,
+  onProviderChange,
+  onPresetSelect,
 }: {
   profileName: string;
   onSubmit: (topic: string) => void;
   onChangeProfile: () => void;
   isLoading: boolean;
+  provider: Provider;
+  onProviderChange: (p: Provider) => void;
+  onPresetSelect: (key: string) => void;
 }) {
   const [topic, setTopic] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -46,7 +48,8 @@ function TopicInput({
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 flex flex-col items-center justify-center p-6">
       <div className="max-w-2xl w-full">
-        <div className="text-center mb-10">
+        {/* Header */}
+        <div className="text-center mb-8">
           <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-3">
             LoreLearn
           </h1>
@@ -55,6 +58,40 @@ function TopicInput({
           </p>
         </div>
 
+        {/* Profile & Provider selectors */}
+        <div className="flex gap-3 mb-6">
+          <div className="flex-1">
+            <label className="block text-xs text-white/40 mb-1.5 uppercase tracking-wider">Learner</label>
+            <select
+              value=""
+              onChange={(e) => {
+                if (e.target.value) onPresetSelect(e.target.value);
+              }}
+              className="w-full py-2.5 px-4 bg-white/10 border border-white/20 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 appearance-none cursor-pointer"
+            >
+              <option value="" disabled className="bg-gray-900">{profileName} (active)</option>
+              {Object.entries(PROFILE_PRESETS).map(([key, preset]) => (
+                <option key={key} value={key} className="bg-gray-900">
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs text-white/40 mb-1.5 uppercase tracking-wider">AI Provider</label>
+            <select
+              value={provider}
+              onChange={(e) => onProviderChange(e.target.value as Provider)}
+              className="w-full py-2.5 px-4 bg-white/10 border border-white/20 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 appearance-none cursor-pointer"
+            >
+              {Object.entries(PROVIDER_LABELS).map(([key, label]) => (
+                <option key={key} value={key} className="bg-gray-900">{label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Topic input */}
         <form onSubmit={handleSubmit} className="mb-8">
           <div className="relative">
             <input
@@ -85,6 +122,7 @@ function TopicInput({
           </div>
         </form>
 
+        {/* Suggestion chips */}
         <div className="flex flex-wrap gap-2 justify-center mb-8">
           {suggestions.map((s) => (
             <button
@@ -103,7 +141,7 @@ function TopicInput({
             onClick={onChangeProfile}
             className="text-sm text-white/30 hover:text-white/60 transition-colors"
           >
-            Change learner profile
+            Edit profile manually
           </button>
         </div>
       </div>
@@ -126,21 +164,22 @@ function GenerationProgress({
   topic,
   sceneCount,
   sceneStatuses,
+  provider,
 }: {
   stage: GenerationStage;
   topic: string;
   sceneCount: number;
   sceneStatuses: SceneStatus[];
+  provider: Provider;
 }) {
   const stages: { key: GenerationStage; label: string; icon: string }[] = [
-    { key: 'story', label: 'Planning scenes', icon: '🎬' },
-    { key: 'images', label: 'Creating visuals', icon: '🎨' },
-    { key: 'voices', label: 'Recording narration', icon: '🎙️' },
-    { key: 'videos', label: 'Animating scenes', icon: '✨' },
+    { key: 'story', label: 'Planning scenes (Claude)', icon: '🎬' },
+    { key: 'images', label: `Creating visuals (${provider === 'google' ? 'Gemini' : 'Nano Banana Pro'})`, icon: '🎨' },
+    { key: 'voices', label: 'Recording narration (ElevenLabs)', icon: '🎙️' },
+    { key: 'videos', label: `Animating scenes (${provider === 'google' ? 'Veo 3' : 'Kling 3.0'})`, icon: '✨' },
   ];
 
   const stageIndex = stages.findIndex((s) => s.key === stage);
-
   const videosComplete = sceneStatuses.filter((s) => s.videoStatus === 'complete').length;
   const videosTotal = sceneStatuses.length || sceneCount;
 
@@ -149,12 +188,8 @@ function GenerationProgress({
       <div className="max-w-lg w-full bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-10">
         <div className="text-center mb-8">
           <div className="text-5xl mb-4">{stages[Math.min(stageIndex, stages.length - 1)]?.icon ?? '✨'}</div>
-          <h2 className="text-2xl font-bold text-white mb-2">
-            Creating your video
-          </h2>
-          <p className="text-purple-300 text-sm">
-            &ldquo;{topic}&rdquo;
-          </p>
+          <h2 className="text-2xl font-bold text-white mb-2">Creating your video</h2>
+          <p className="text-purple-300 text-sm">&ldquo;{topic}&rdquo;</p>
         </div>
 
         <div className="space-y-4">
@@ -176,9 +211,7 @@ function GenerationProgress({
                   }`}>
                     {s.label}
                     {isActive && s.key === 'videos' && videosTotal > 0 && (
-                      <span className="ml-2 text-purple-400">
-                        ({videosComplete}/{videosTotal})
-                      </span>
+                      <span className="ml-2 text-purple-400">({videosComplete}/{videosTotal})</span>
                     )}
                   </p>
                 </div>
@@ -210,7 +243,7 @@ function GenerationProgress({
   );
 }
 
-// ─── Video Player (stitched clips + voice overlay) ──────────────────────────
+// ─── Video Player ───────────────────────────────────────────────────────────
 function VideoPlayer({
   episode,
   onBack,
@@ -228,9 +261,10 @@ function VideoPlayer({
   const scene = scenesWithVideo[currentScene];
   if (!scene) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center text-white">
-        <p>No video scenes available.</p>
-        <button onClick={onBack} className="ml-4 underline">Go back</button>
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white gap-4">
+        <p className="text-lg">No video scenes were generated.</p>
+        <p className="text-sm text-white/50">Check that your API keys are set in Vercel environment variables.</p>
+        <button onClick={onBack} className="mt-4 px-6 py-3 bg-purple-600 rounded-xl hover:bg-purple-700 transition-colors">Try another topic</button>
       </div>
     );
   }
@@ -250,16 +284,9 @@ function VideoPlayer({
     if (currentScene < scenesWithVideo.length - 1) {
       setCurrentScene((prev) => prev + 1);
       setIsPlaying(false);
-      // Auto-play next scene after brief pause
       setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.play();
-          setIsPlaying(true);
-        }
-        if (audioRef.current) {
-          audioRef.current.currentTime = 0;
-          audioRef.current.play();
-        }
+        if (videoRef.current) { videoRef.current.play(); setIsPlaying(true); }
+        if (audioRef.current) { audioRef.current.currentTime = 0; audioRef.current.play(); }
       }, 300);
     } else {
       setIsPlaying(false);
@@ -268,7 +295,6 @@ function VideoPlayer({
 
   return (
     <div className="min-h-screen bg-black flex flex-col">
-      {/* Video area */}
       <div className="flex-1 relative flex items-center justify-center">
         <video
           ref={videoRef}
@@ -280,17 +306,11 @@ function VideoPlayer({
           onPause={() => setIsPlaying(false)}
           playsInline
         />
-
         {scene.generatedAudio?.url && (
           <audio ref={audioRef} key={scene.generatedAudio?.url} src={scene.generatedAudio.url} />
         )}
-
-        {/* Play overlay */}
         {!isPlaying && (
-          <button
-            onClick={playScene}
-            className="absolute inset-0 flex items-center justify-center bg-black/40"
-          >
+          <button onClick={playScene} className="absolute inset-0 flex items-center justify-center bg-black/40">
             <div className="w-20 h-20 bg-white/20 backdrop-blur-xl rounded-full flex items-center justify-center hover:bg-white/30 transition-all">
               <svg className="w-10 h-10 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
@@ -298,8 +318,6 @@ function VideoPlayer({
             </div>
           </button>
         )}
-
-        {/* Scene narration subtitle */}
         <div className="absolute bottom-4 left-4 right-4">
           <div className="bg-black/70 backdrop-blur-sm rounded-xl px-6 py-3 text-center">
             <p className="text-white text-sm leading-relaxed">{scene.narration}</p>
@@ -307,17 +325,12 @@ function VideoPlayer({
         </div>
       </div>
 
-      {/* Controls */}
       <div className="bg-gradient-to-t from-black to-transparent p-6">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-white font-bold text-lg">{episode.title}</h2>
-            <span className="text-purple-400 text-sm">
-              Scene {currentScene + 1} of {scenesWithVideo.length}
-            </span>
+            <span className="text-purple-400 text-sm">Scene {currentScene + 1} of {scenesWithVideo.length}</span>
           </div>
-
-          {/* Scene dots */}
           <div className="flex gap-2 justify-center mb-4">
             {scenesWithVideo.map((_, i) => (
               <button
@@ -330,19 +343,12 @@ function VideoPlayer({
               />
             ))}
           </div>
-
           <div className="flex justify-between">
-            <button
-              onClick={onBack}
-              className="px-6 py-2 text-white/50 hover:text-white text-sm transition-colors"
-            >
+            <button onClick={onBack} className="px-6 py-2 text-white/50 hover:text-white text-sm transition-colors">
               New topic
             </button>
             <button
-              onClick={() => {
-                setCurrentScene(0);
-                setIsPlaying(false);
-              }}
+              onClick={() => { setCurrentScene(0); setIsPlaying(false); }}
               className="px-6 py-2 bg-purple-500/20 text-purple-300 rounded-lg hover:bg-purple-500/30 text-sm transition-colors"
             >
               Replay
@@ -356,20 +362,36 @@ function VideoPlayer({
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
 export default function CreatePage() {
-  const { profile, setProfile } = useSavedProfile();
+  const [profile, setProfile] = useState<Omit<ChildProfile, 'learningTopic'> | null>(null);
   const [stage, setStage] = useState<'setup' | 'topic' | 'generating' | 'playing'>('setup');
   const [genStage, setGenStage] = useState<GenerationStage>('story');
   const [episode, setEpisode] = useState<Episode | null>(null);
   const [topic, setTopic] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [sceneStatuses, setSceneStatuses] = useState<SceneStatus[]>([]);
+  const [provider, setProvider] = useState<Provider>('fal');
 
-  // If profile exists, start at topic entry
+  // Auto-load Sania's profile on mount
   useEffect(() => {
-    if (profile) setStage('topic');
-  }, [profile]);
+    const sania = PROFILE_PRESETS.sania;
+    if (sania) {
+      setProfile({ ...sania.profile, id: 'preset-sania' } as Omit<ChildProfile, 'learningTopic'> & { id: string });
+      setStage('topic');
+    }
+  }, []);
 
-  // ─── Profile Setup ──────────────────────────
+  const handlePresetSelect = (key: string) => {
+    const preset = PROFILE_PRESETS[key];
+    if (!preset) return;
+    if (key === 'custom') {
+      setProfile(null);
+      setStage('setup');
+    } else {
+      setProfile({ ...preset.profile, id: `preset-${key}` } as Omit<ChildProfile, 'learningTopic'> & { id: string });
+      setStage('topic');
+    }
+  };
+
   const handleProfileSave = (fullProfile: ChildProfile) => {
     const { learningTopic: _, ...base } = fullProfile;
     setProfile(base);
@@ -384,7 +406,7 @@ export default function CreatePage() {
     setGenStage('story');
     setError(null);
 
-    const fullProfile: ChildProfile = { ...profile, learningTopic: selectedTopic };
+    const fullProfile: ChildProfile = { ...profile, learningTopic: selectedTopic } as ChildProfile;
 
     try {
       // 1. Generate story/scene plan
@@ -427,6 +449,7 @@ export default function CreatePage() {
               characterReferenceUrl: isFirst ? undefined : characterRefUrl,
               seed,
               isFirstScene: isFirst,
+              provider,
             }),
           });
           const data = await resp.json();
@@ -460,7 +483,7 @@ export default function CreatePage() {
         }
       }
 
-      // 3. Generate voices (parallel) + Submit videos (parallel)
+      // 3. Generate voices (parallel)
       setGenStage('voices');
       const voiceTone = fullProfile.sensoryPreferences.preferredVoiceTone;
 
@@ -499,18 +522,15 @@ export default function CreatePage() {
 
       await Promise.all(voicePromises);
 
-      // 4. Submit ALL video jobs in parallel (Kling 3.0 Omni via Replicate)
+      // 4. Submit ALL video jobs in parallel
       setGenStage('videos');
 
-      // Get latest episode state with generated images
       let latestEpisode: Episode | null = null;
       setEpisode((prev) => { latestEpisode = prev; return prev; });
 
       const videoJobs: Array<{ sceneIndex: number; requestId: string }> = [];
 
       if (latestEpisode) {
-        const refImages = characterRefUrl ? [characterRefUrl] : [];
-
         const videoSubmissions = (latestEpisode as Episode).scenes.map(async (scene: typeof ep.scenes[0], i: number) => {
           if (!scene.generatedImage?.url) return;
 
@@ -529,7 +549,7 @@ export default function CreatePage() {
                 imageUrl: scene.generatedImage.url,
                 prompt: videoPrompt,
                 duration: 5,
-                referenceImages: refImages,
+                provider,
               }),
             });
             const data = await resp.json();
@@ -552,7 +572,7 @@ export default function CreatePage() {
         // 5. Poll all video jobs until complete
         const pending = new Set(videoJobs.map((j) => j.sceneIndex));
         let attempts = 0;
-        const maxAttempts = 150; // ~12.5 minutes
+        const maxAttempts = 150;
 
         while (pending.size > 0 && attempts < maxAttempts) {
           await new Promise((r) => setTimeout(r, 5000));
@@ -561,7 +581,7 @@ export default function CreatePage() {
           for (const job of videoJobs) {
             if (!pending.has(job.sceneIndex)) continue;
             try {
-              const resp = await fetch(`/api/video?requestId=${job.requestId}`);
+              const resp = await fetch(`/api/video?requestId=${job.requestId}&provider=${provider}`);
               const data = await resp.json();
 
               if (data.status === 'COMPLETED' && data.videoUrl) {
@@ -571,11 +591,7 @@ export default function CreatePage() {
                   const scenes = [...prev.scenes];
                   scenes[job.sceneIndex] = {
                     ...scenes[job.sceneIndex],
-                    generatedVideo: {
-                      url: data.videoUrl,
-                      duration: 5,
-                      prompt: 'generated',
-                    },
+                    generatedVideo: { url: data.videoUrl, duration: 5, prompt: 'generated' },
                   };
                   return { ...prev, scenes };
                 });
@@ -594,7 +610,6 @@ export default function CreatePage() {
           }
         }
 
-        // Mark remaining as error
         for (const idx of pending) {
           setSceneStatuses((prev) => {
             const n = [...prev]; n[idx] = { ...n[idx], videoStatus: 'error' }; return n;
@@ -652,6 +667,9 @@ export default function CreatePage() {
         onSubmit={handleTopicSubmit}
         onChangeProfile={() => { setProfile(null); setStage('setup'); }}
         isLoading={false}
+        provider={provider}
+        onProviderChange={setProvider}
+        onPresetSelect={handlePresetSelect}
       />
     );
   }
@@ -663,6 +681,7 @@ export default function CreatePage() {
         topic={topic}
         sceneCount={5}
         sceneStatuses={sceneStatuses}
+        provider={provider}
       />
     );
   }
