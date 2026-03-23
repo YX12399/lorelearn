@@ -7,7 +7,7 @@ export const maxDuration = 300;
 export async function POST(request: NextRequest) {
   try {
     const body: MultiShotVideoRequest = await request.json();
-    const { shots, characterReferenceUrls } = body;
+    const { shots } = body;
 
     if (!shots || shots.length === 0) {
       return NextResponse.json(
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await generateMultiShotVideo(shots, characterReferenceUrls);
+    const result = await generateMultiShotVideo(shots);
     return NextResponse.json(result);
   } catch (error) {
     console.error('Multi-shot video generation error:', error);
