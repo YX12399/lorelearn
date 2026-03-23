@@ -217,6 +217,7 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const scenesWithVideo = episode.scenes.filter((s) => s.generatedVideo?.url);
   const scene = scenesWithVideo[currentScene];
@@ -246,6 +247,53 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
       }, 300);
     } else {
       setIsPlaying(false);
+    }
+  };
+
+  const downloadScene = async (sceneIdx: number) => {
+    const s = scenesWithVideo[sceneIdx];
+    if (!s?.generatedVideo?.url) return;
+    try {
+      const resp = await fetch(s.generatedVideo.url);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${episode.title.replace(/[^a-zA-Z0-9]/g, '_')}_scene_${sceneIdx + 1}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Download failed:', err);
+    }
+  };
+
+  const downloadAll = async () => {
+    setDownloading(true);
+    for (let i = 0; i < scenesWithVideo.length; i++) {
+      await downloadScene(i);
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    setDownloading(false);
+  };
+
+  const downloadNarration = async (sceneIdx: number) => {
+    const s = scenesWithVideo[sceneIdx];
+    if (!s?.generatedAudio?.url) return;
+    try {
+      const resp = await fetch(s.generatedAudio.url);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${episode.title.replace(/[^a-zA-Z0-9]/g, '_')}_narration_${sceneIdx + 1}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Download narration failed:', err);
     }
   };
 
@@ -279,6 +327,35 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
                 className={`h-1.5 rounded-full transition-all ${i === currentScene ? 'w-8 bg-purple-400' : i < currentScene ? 'w-4 bg-green-500' : 'w-4 bg-white/20'}`} />
             ))}
           </div>
+
+          {/* Download controls */}
+          <div className="flex gap-2 justify-center mb-4">
+            <button
+              onClick={() => downloadScene(currentScene)}
+              className="px-4 py-2 bg-blue-500/20 text-blue-300 rounded-lg hover:bg-blue-500/30 text-sm transition-colors flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              Scene {currentScene + 1} Video
+            </button>
+            {scene.generatedAudio?.url && (
+              <button
+                onClick={() => downloadNarration(currentScene)}
+                className="px-4 py-2 bg-green-500/20 text-green-300 rounded-lg hover:bg-green-500/30 text-sm transition-colors flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                Narration
+              </button>
+            )}
+            <button
+              onClick={downloadAll}
+              disabled={downloading}
+              className="px-4 py-2 bg-purple-500/20 text-purple-300 rounded-lg hover:bg-purple-500/30 text-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              {downloading ? 'Downloading...' : 'All Scenes'}
+            </button>
+          </div>
+
           <div className="flex justify-between">
             <button onClick={onBack} className="px-6 py-2 text-white/50 hover:text-white text-sm transition-colors">New topic</button>
             <button onClick={() => { setCurrentScene(0); setIsPlaying(false); }} className="px-6 py-2 bg-purple-500/20 text-purple-300 rounded-lg hover:bg-purple-500/30 text-sm transition-colors">Replay</button>
