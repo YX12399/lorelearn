@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateMultiShotVideo } from '@/lib/video-generator';
 import { MultiShotVideoRequest } from '@/types';
 
+export const maxDuration = 300;
+
 export async function POST(request: NextRequest) {
   try {
     const body: MultiShotVideoRequest = await request.json();

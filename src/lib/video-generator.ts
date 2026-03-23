@@ -1,9 +1,76 @@
 import { fal } from '@fal-ai/client';
 
 /**
- * Generate a single scene video from a keyframe image.
- * Returns the video URL and attempts to capture the last frame
- * for continuity with the next scene.
+ * Submit a video generation job to the queue (non-blocking).
+ * Returns a request_id that can be polled for status.
+ */
+export async function submitVideoJob(
+  imageUrl: string,
+  prompt: string,
+  options: {
+    duration?: number;
+  } = {}
+): Promise<{ requestId: string }> {
+  fal.config({ credentials: process.env.FAL_KEY });
+  const { duration = 5 } = options;
+
+  const videoPrompt = [
+    prompt,
+    'Smooth gentle animation with natural character movement.',
+    'Child-friendly, no sudden jumps, no flashing, no rapid camera moves.',
+    'Warm soft lighting throughout. Consistent character appearance.',
+    'Subtle ambient motion: hair sway, blinking, gentle breathing, light particles.',
+  ].join(' ');
+
+  // Kling v1.6 Pro accepts: prompt, image_url, duration (string), aspect_ratio
+  // It does NOT accept: cfg_scale, motion_bucket_id, start_image_url, end_image_url
+  const result = await fal.queue.submit('fal-ai/kling-video/v1.6/pro/image-to-video', {
+    input: {
+      prompt: videoPrompt,
+      image_url: imageUrl,
+      duration: (duration >= 10 ? '10' : '5') as '5' | '10',     // Kling expects "5" or "10" as string
+      aspect_ratio: '16:9',
+    },
+  });
+
+  return { requestId: result.request_id };
+}
+
+/**
+ * Check the status of a queued video generation job.
+ */
+export async function checkVideoStatus(
+  requestId: string
+): Promise<{ status: string; videoUrl?: string; endFrameUrl?: string }> {
+  fal.config({ credentials: process.env.FAL_KEY });
+
+  const status = await fal.queue.status('fal-ai/kling-video/v1.6/pro/image-to-video', {
+    requestId,
+    logs: false,
+  });
+
+  if (status.status === 'COMPLETED') {
+    const result = await fal.queue.result('fal-ai/kling-video/v1.6/pro/image-to-video', {
+      requestId,
+    });
+
+    const output = result.data as Record<string, unknown>;
+    const videoData = output.video as { url?: string } | string | undefined;
+    const videoUrl = typeof videoData === 'string' ? videoData : videoData?.url;
+
+    return {
+      status: 'COMPLETED',
+      videoUrl: videoUrl || undefined,
+    };
+  }
+
+  return { status: status.status }; // IN_QUEUE, IN_PROGRESS, etc.
+}
+
+/**
+ * Generate a single scene video from a keyframe image (blocking).
+ * Uses fal.subscribe which polls internally until done.
+ * WARNING: This can take 2-5 minutes. Only use where timeout allows.
  */
 export async function generateSceneVideo(
   imageUrl: string,
@@ -18,7 +85,6 @@ export async function generateSceneVideo(
   fal.config({ credentials: process.env.FAL_KEY });
   const { duration = 5 } = options;
 
-  // Build a video-specific prompt that enforces smooth, child-safe animation
   const videoPrompt = [
     prompt,
     'Smooth gentle animation with natural character movement.',
@@ -27,26 +93,16 @@ export async function generateSceneVideo(
     'Subtle ambient motion: hair sway, blinking, gentle breathing, light particles.',
   ].join(' ');
 
-  const input: Record<string, unknown> = {
-    prompt: videoPrompt,
-    image_url: imageUrl,
-    duration,
-    aspect_ratio: '16:9',
-    cfg_scale: 0.5,
-    motion_bucket_id: 80, // Lower = less motion = more consistent
-  };
-
-  // Chain scenes by using previous scene's end frame as this scene's start
-  if (options.startFrameUrl) {
-    input.start_image_url = options.startFrameUrl;
-  }
-  if (options.endFrameUrl) {
-    input.end_image_url = options.endFrameUrl;
-  }
-
+  // Kling v1.6 Pro parameters — only send what the API actually accepts
   const result = await fal.subscribe('fal-ai/kling-video/v1.6/pro/image-to-video', {
-    input: input as Parameters<typeof fal.subscribe>[1]['input'],
+    input: {
+      prompt: videoPrompt,
+      image_url: imageUrl,
+      duration: (duration >= 10 ? '10' : '5') as '5' | '10',
+      aspect_ratio: '16:9',
+    } as Parameters<typeof fal.subscribe>[1]['input'],
     logs: false,
+    pollInterval: 3000,   // Poll every 3 seconds
   });
 
   const output = result.data as Record<string, unknown>;
@@ -57,63 +113,44 @@ export async function generateSceneVideo(
     throw new Error('No video URL returned from fal.ai');
   }
 
-  // Use the scene's own image as the "end frame" fallback for chaining.
-  // The next scene will receive this as its startFrameUrl, creating visual continuity.
   return {
     videoUrl,
-    endFrameUrl: imageUrl, // Best available reference for scene continuity
+    endFrameUrl: imageUrl,
   };
 }
 
 /**
  * Generate a multi-shot cohesive video from a series of scene images.
- * Processes shots sequentially, chaining end frames for continuity.
- * Returns all individual video URLs for client-side assembly.
+ * Uses queue-based submission for each shot to avoid timeouts.
  */
 export async function generateMultiShotVideo(
   shots: Array<{ imageUrl: string; prompt: string; duration: number }>,
   _characterReferenceUrls?: string[]
-): Promise<{ videoUrl: string; videoUrls: string[] }> {
+): Promise<{ videoUrl: string; videoUrls: string[]; requestIds: string[] }> {
   fal.config({ credentials: process.env.FAL_KEY });
 
-  const videoUrls: string[] = [];
-  let previousEndFrameUrl: string | undefined;
+  const requestIds: string[] = [];
 
-  for (let i = 0; i < Math.min(shots.length, 6); i++) {
-    const shot = shots[i];
-
-    const input: Record<string, unknown> = {
-      prompt: shot.prompt,
-      image_url: shot.imageUrl,
-      duration: shot.duration,
-      aspect_ratio: '16:9',
-      cfg_scale: 0.5,
-      motion_bucket_id: 80,
-    };
-
-    // Chain: use previous scene's end frame as start reference
-    if (previousEndFrameUrl) {
-      input.start_image_url = previousEndFrameUrl;
-    }
-
-    const result = await fal.subscribe('fal-ai/kling-video/v1.6/pro/image-to-video', {
-      input: input as Parameters<typeof fal.subscribe>[1]['input'],
-      logs: false,
+  // Submit all shots to the queue in parallel
+  const submissions = shots.slice(0, 6).map(async (shot) => {
+    const result = await fal.queue.submit('fal-ai/kling-video/v1.6/pro/image-to-video', {
+      input: {
+        prompt: shot.prompt,
+        image_url: shot.imageUrl,
+        duration: (shot.duration >= 10 ? '10' : '5') as '5' | '10',
+        aspect_ratio: '16:9',
+      },
     });
+    return result.request_id;
+  });
 
-    const output = result.data as Record<string, unknown>;
-    const videoData = output.video as { url?: string } | string | undefined;
-    const videoUrl = typeof videoData === 'string' ? videoData : videoData?.url;
-    if (videoUrl) {
-      videoUrls.push(videoUrl);
-    }
+  const ids = await Promise.all(submissions);
+  requestIds.push(...ids);
 
-    // Use this shot's image as the continuity reference for the next shot
-    previousEndFrameUrl = shot.imageUrl;
-  }
-
+  // Return request IDs for the client to poll
   return {
-    videoUrl: videoUrls[videoUrls.length - 1] || '',
-    videoUrls,
+    videoUrl: '',
+    videoUrls: [],
+    requestIds,
   };
 }

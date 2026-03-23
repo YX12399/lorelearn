@@ -367,7 +367,8 @@ export default function CreatePage() {
 
   /**
    * Generate animated videos for each scene.
-   * Sequential processing with end-frame chaining for visual continuity.
+   * Uses queue-based submission + polling to avoid Vercel timeouts.
+   * All scenes are submitted in parallel, then polled until complete.
    */
   const handleGenerateVideo = async () => {
     if (!episode) return;
@@ -376,11 +377,12 @@ export default function CreatePage() {
     const snap = episode;
     const characterReferenceUrl =
       snap.continuityBible.characterReferenceImageUrl;
-    let previousEndFrameUrl: string | undefined;
 
-    for (let i = 0; i < snap.scenes.length; i++) {
-      const scene = snap.scenes[i];
-      if (!scene.generatedImage?.url) continue;
+    // Step 1: Submit all video jobs in parallel
+    const jobs: Array<{ sceneIndex: number; requestId: string; prompt: string }> = [];
+
+    const submissions = snap.scenes.map(async (scene, i) => {
+      if (!scene.generatedImage?.url) return;
 
       setSceneStatuses((prev) => {
         const next = [...prev];
@@ -391,65 +393,96 @@ export default function CreatePage() {
       const videoPrompt = buildSceneVideoPrompt(
         scene,
         snap.childProfile,
-        previousEndFrameUrl,
+        undefined,
         characterReferenceUrl
       );
-
-      const startFrame = previousEndFrameUrl;
 
       try {
         const resp = await fetch('/api/video', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            sceneId: scene.id,
+            mode: 'submit',
             imageUrl: scene.generatedImage.url,
             prompt: videoPrompt,
-            startFrameUrl: startFrame,
-            characterReferenceUrls: characterReferenceUrl
-              ? [characterReferenceUrl]
-              : undefined,
-            duration: scene.duration,
+            duration: scene.duration || 5,
           }),
         });
         const data = await resp.json();
-        if (!resp.ok)
-          throw new Error(data.error ?? 'Video generation failed');
+        if (!resp.ok) throw new Error(data.error ?? 'Video submit failed');
 
-        // Chain: use this scene's end frame as the next scene's start reference
-        previousEndFrameUrl =
-          data.endFrameUrl ?? scene.generatedImage.url;
-
-        setEpisode((prev) => {
-          if (!prev) return null;
-          const scenes = [...prev.scenes];
-          scenes[i] = {
-            ...scenes[i],
-            generatedVideo: {
-              url: data.videoUrl,
-              duration: scene.duration,
-              startFrameUrl: startFrame,
-              endFrameUrl: data.endFrameUrl,
-              prompt: videoPrompt,
-            },
-          };
-          return { ...prev, scenes };
-        });
-        setSceneStatuses((prev) => {
-          const next = [...prev];
-          next[i] = { ...next[i], videoStatus: 'complete' };
-          return next;
-        });
+        jobs.push({ sceneIndex: i, requestId: data.requestId, prompt: videoPrompt });
       } catch (err) {
-        console.error(`Video error scene ${i}:`, err);
+        console.error(`Video submit error scene ${i}:`, err);
         setSceneStatuses((prev) => {
           const next = [...prev];
           next[i] = { ...next[i], videoStatus: 'error' };
           return next;
         });
-        // Fallback: use this scene's image as the frame reference for next scene
-        previousEndFrameUrl = scene.generatedImage.url;
       }
+    });
+
+    await Promise.all(submissions);
+
+    // Step 2: Poll all jobs until complete (check every 5 seconds)
+    const pending = new Set(jobs.map((j) => j.sceneIndex));
+    const maxAttempts = 120; // 10 minutes max
+    let attempts = 0;
+
+    while (pending.size > 0 && attempts < maxAttempts) {
+      await new Promise((r) => setTimeout(r, 5000));
+      attempts++;
+
+      for (const job of jobs) {
+        if (!pending.has(job.sceneIndex)) continue;
+
+        try {
+          const resp = await fetch(`/api/video?requestId=${job.requestId}`);
+          const data = await resp.json();
+
+          if (data.status === 'COMPLETED' && data.videoUrl) {
+            pending.delete(job.sceneIndex);
+
+            setEpisode((prev) => {
+              if (!prev) return null;
+              const scenes = [...prev.scenes];
+              scenes[job.sceneIndex] = {
+                ...scenes[job.sceneIndex],
+                generatedVideo: {
+                  url: data.videoUrl,
+                  duration: snap.scenes[job.sceneIndex].duration,
+                  prompt: job.prompt,
+                },
+              };
+              return { ...prev, scenes };
+            });
+            setSceneStatuses((prev) => {
+              const next = [...prev];
+              next[job.sceneIndex] = { ...next[job.sceneIndex], videoStatus: 'complete' };
+              return next;
+            });
+          } else if (data.status === 'FAILED') {
+            pending.delete(job.sceneIndex);
+            setSceneStatuses((prev) => {
+              const next = [...prev];
+              next[job.sceneIndex] = { ...next[job.sceneIndex], videoStatus: 'error' };
+              return next;
+            });
+          }
+          // IN_QUEUE or IN_PROGRESS: keep polling
+        } catch (err) {
+          console.error(`Video poll error scene ${job.sceneIndex}:`, err);
+        }
+      }
+    }
+
+    // Mark any remaining as error (timed out)
+    for (const idx of pending) {
+      setSceneStatuses((prev) => {
+        const next = [...prev];
+        next[idx] = { ...next[idx], videoStatus: 'error' };
+        return next;
+      });
     }
 
     setStage('playing');
