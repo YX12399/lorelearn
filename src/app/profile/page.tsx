@@ -61,13 +61,20 @@ export default function ProfilePage() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    setCustomPresets(getCustomPresets());
+    const customs = getCustomPresets();
+    setCustomPresets(customs);
+    // If a custom version of the selected preset exists, load it instead of the hardcoded one
+    if (customs[selectedKey]) {
+      setProfile(JSON.parse(JSON.stringify(customs[selectedKey])));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const allPresets = { ...PROFILE_PRESETS, ...customPresets };
 
   const handleSelect = (key: string) => {
     setSelectedKey(key);
+    // Custom presets override hardcoded ones — so user edits are preserved
     const merged = { ...PROFILE_PRESETS, ...customPresets };
     if (merged[key]) setProfile(JSON.parse(JSON.stringify(merged[key])));
     setSaved(false);
@@ -245,8 +252,19 @@ export default function ProfilePage() {
             onClick={handleSave}
             className={`w-full py-3 font-semibold rounded-xl transition-all text-sm ${saved ? 'bg-green-500/20 text-green-300' : 'bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600'}`}
           >
-            {saved ? 'Saved!' : 'Save Profile'}
+            {saved ? 'Saved! This profile will be used for all new videos.' : 'Save Profile'}
           </button>
+
+          {/* Profile summary */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+            <h2 className="text-white font-semibold mb-3">Profile Summary</h2>
+            <p className="text-purple-300 text-sm leading-relaxed">
+              <span className="text-white font-medium">{p.name}</span>, age <span className="text-white font-medium">{p.age}</span> — {p.avatar.hairColor} {p.avatar.hairStyle} hair, {p.avatar.skinTone} skin, {p.avatar.eyeColor} eyes. Wearing {p.avatar.favoriteOutfit}.
+              {p.interests.animals.length > 0 && <> Loves {p.interests.animals.join(', ')}.</>}
+              {p.interests.colors.length > 0 && <> Favorite colors: {p.interests.colors.join(', ')}.</>}
+            </p>
+            <p className="text-white/30 text-xs mt-2">This is exactly what the AI will use to generate your character.</p>
+          </div>
         </div>
       </div>
     </div>

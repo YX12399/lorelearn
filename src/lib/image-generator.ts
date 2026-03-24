@@ -1,6 +1,13 @@
 import { fal } from '@fal-ai/client';
 
-fal.config({ credentials: process.env.FAL_KEY });
+/** Ensure fal credentials are configured before each call */
+function ensureFalConfig() {
+  const key = process.env.FAL_KEY;
+  if (!key) {
+    throw new Error('FAL_KEY environment variable is not set. Please add it to your Vercel project settings.');
+  }
+  fal.config({ credentials: key });
+}
 
 // Nano Banana Pro — Google's Gemini 3 Pro image model
 // 4K native, reasoning-based composition, best-in-class character consistency
@@ -17,6 +24,7 @@ export async function generateSceneImage(
   seed?: number,
   isFirstScene?: boolean
 ): Promise<{ imageUrl: string; seed: number }> {
+  ensureFalConfig();
   const usedSeed = seed ?? Math.floor(Math.random() * 1_000_000);
 
   // Build an enriched prompt that bakes in style consistency

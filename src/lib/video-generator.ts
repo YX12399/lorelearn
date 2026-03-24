@@ -1,9 +1,16 @@
 import { fal } from '@fal-ai/client';
 
-fal.config({ credentials: process.env.FAL_KEY });
-
 // Kling 3.0 on fal.ai — best cinematic video model available
 const KLING_MODEL = 'fal-ai/kling-video/v3/standard/image-to-video';
+
+/** Ensure fal credentials are configured before each call */
+function ensureFalConfig() {
+  const key = process.env.FAL_KEY;
+  if (!key) {
+    throw new Error('FAL_KEY environment variable is not set. Please add it to your Vercel project settings.');
+  }
+  fal.config({ credentials: key });
+}
 
 /**
  * Submit a Kling 3.0 video generation job (non-blocking).
@@ -18,6 +25,7 @@ export async function submitVideoJob(
     enableAudio?: boolean;
   } = {}
 ): Promise<{ requestId: string }> {
+  ensureFalConfig();
   const { duration = 5, endImageUrl, enableAudio = false } = options;
 
   const videoPrompt = buildVideoPrompt(prompt);
@@ -45,6 +53,7 @@ export async function submitVideoJob(
 export async function checkVideoStatus(
   requestId: string
 ): Promise<{ status: string; videoUrl?: string }> {
+  ensureFalConfig();
   const statusResult = await fal.queue.status(KLING_MODEL, {
     requestId,
     logs: false,
@@ -88,6 +97,7 @@ export async function generateSceneVideo(
     duration?: number;
   } = {}
 ): Promise<{ videoUrl: string; endFrameUrl?: string }> {
+  ensureFalConfig();
   const videoPrompt = buildVideoPrompt(prompt);
 
   const input: Record<string, unknown> = {
@@ -122,6 +132,7 @@ export async function generateSceneVideo(
 export async function generateMultiShotVideo(
   shots: Array<{ imageUrl: string; prompt: string; duration: number }>
 ): Promise<{ videoUrl: string; videoUrls: string[]; requestIds: string[] }> {
+  ensureFalConfig();
   const submissions = shots.slice(0, 6).map(async (shot) => {
     const { requestId } = await submitVideoJob(shot.imageUrl, shot.prompt, {
       duration: shot.duration,

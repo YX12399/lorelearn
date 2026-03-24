@@ -47,6 +47,8 @@ async function uploadAssetToStorage(
 // ─── Topic Input with Profile Selector & Provider Picker ────────────────────
 function TopicInput({
   profileName,
+  profileAge,
+  profileSummary,
   onSubmit,
   onChangeProfile,
   isLoading,
@@ -55,6 +57,8 @@ function TopicInput({
   onPresetSelect,
 }: {
   profileName: string;
+  profileAge: number;
+  profileSummary: string;
   onSubmit: (topic: string) => void;
   onChangeProfile: () => void;
   isLoading: boolean;
@@ -91,6 +95,9 @@ function TopicInput({
           <p className="text-purple-300 text-lg">
             Hey {profileName}! What do you want to learn about today?
           </p>
+          <div className="mt-3 inline-block bg-white/5 border border-white/10 rounded-xl px-4 py-2">
+            <p className="text-white/50 text-xs">{profileSummary}</p>
+          </div>
         </div>
 
         <div className="flex gap-3 mb-6">
@@ -368,15 +375,31 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
     setSavedToHistory(true);
   };
 
-  if (!scene) {
+  // If no videos but we have images, fall back to slideshow mode
+  const scenesWithImages = episode.scenes.filter((s) => s.generatedImage?.url);
+  const useSlideshowMode = scenesWithVideo.length === 0 && scenesWithImages.length > 0;
+  
+  if (!scene && !useSlideshowMode) {
     return (
-      <div className="min-h-screen bg-black flex flex-col items-center justify-center text-white gap-4">
-        <p className="text-lg">No video scenes were generated.</p>
-        <p className="text-sm text-white/50">Check that your API keys are set in Vercel environment variables.</p>
-        <button onClick={onBack} className="mt-4 px-6 py-3 bg-purple-600 rounded-xl hover:bg-purple-700 transition-colors">Try another topic</button>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 flex flex-col items-center justify-center text-white gap-6 p-6">
+        <div className="text-5xl">😔</div>
+        <p className="text-xl font-semibold">Video generation didn&apos;t complete</p>
+        <p className="text-white/50 text-sm text-center max-w-md">
+          The story and images were created, but animated videos couldn&apos;t be generated. 
+          This usually means the FAL_KEY isn&apos;t configured or the video service is temporarily unavailable.
+        </p>
+        <div className="flex gap-3">
+          <button onClick={onBack} className="px-6 py-3 bg-purple-600 rounded-xl hover:bg-purple-700 transition-colors">Try another topic</button>
+        </div>
       </div>
     );
   }
+  
+  // Slideshow fallback: use images instead of videos
+  const displayScenes = useSlideshowMode ? scenesWithImages : scenesWithVideo;
+  const displayScene = displayScenes[currentScene];
+  
+  if (!displayScene) return null;
 
   const playScene = () => {
     setIsPlaying(true);
@@ -516,33 +539,52 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
   return (
     <div className="min-h-screen bg-black flex flex-col">
       <div className="flex-1 relative flex items-center justify-center">
-        <video ref={videoRef} key={scene.generatedVideo?.url} src={scene.generatedVideo?.url} className="max-w-full max-h-[70vh] rounded-lg" onEnded={handleVideoEnded} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} playsInline />
-        {!isPlaying && (
+        {useSlideshowMode ? (
+          <img src={displayScene.generatedImage?.url} alt={displayScene.title} className="max-w-full max-h-[70vh] rounded-lg object-contain" />
+        ) : (
+          <video ref={videoRef} key={displayScene.generatedVideo?.url} src={displayScene.generatedVideo?.url} className="max-w-full max-h-[70vh] rounded-lg" onEnded={handleVideoEnded} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} playsInline />
+        )}
+        {!isPlaying && !useSlideshowMode && (
           <button onClick={playScene} className="absolute inset-0 flex items-center justify-center bg-black/40">
             <div className="w-20 h-20 bg-white/20 backdrop-blur-xl rounded-full flex items-center justify-center hover:bg-white/30 transition-all">
               <svg className="w-10 h-10 text-white ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
             </div>
           </button>
         )}
-        {isPlaying && (
+        {isPlaying && !useSlideshowMode && (
           <button onClick={pauseScene} className="absolute top-4 right-4 w-10 h-10 bg-black/50 backdrop-blur rounded-full flex items-center justify-center hover:bg-black/70 transition-all">
             <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
           </button>
         )}
         <div className="absolute bottom-4 left-4 right-4">
           <div className="bg-black/70 backdrop-blur-sm rounded-xl px-6 py-3 text-center">
-            <p className="text-white text-sm leading-relaxed">{scene.narration}</p>
+            <p className="text-white text-sm leading-relaxed">{displayScene.narration}</p>
           </div>
         </div>
       </div>
+      {useSlideshowMode && (
+        <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 flex justify-between px-4 pointer-events-none">
+          {currentScene > 0 && (
+            <button onClick={() => goToScene(currentScene - 1)} className="pointer-events-auto w-10 h-10 bg-black/50 backdrop-blur rounded-full flex items-center justify-center hover:bg-black/70 transition-all">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            </button>
+          )}
+          <div />
+          {currentScene < displayScenes.length - 1 && (
+            <button onClick={() => goToScene(currentScene + 1)} className="pointer-events-auto w-10 h-10 bg-black/50 backdrop-blur rounded-full flex items-center justify-center hover:bg-black/70 transition-all">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            </button>
+          )}
+        </div>
+      )}
       <div className="bg-gradient-to-t from-black to-transparent p-6">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-white font-bold text-lg">{episode.title}</h2>
-            <span className="text-purple-400 text-sm">Scene {currentScene + 1} of {scenesWithVideo.length}</span>
+            <span className="text-purple-400 text-sm">{useSlideshowMode ? '📸 Slideshow' : ''} Scene {currentScene + 1} of {displayScenes.length}</span>
           </div>
           <div className="flex gap-2 justify-center mb-4">
-            {scenesWithVideo.map((_, i) => (
+            {displayScenes.map((_, i) => (
               <button key={i} onClick={() => goToScene(i)}
                 className={`h-1.5 rounded-full transition-all ${i === currentScene ? 'w-8 bg-purple-400' : i < currentScene ? 'w-4 bg-green-500' : 'w-4 bg-white/20'}`} />
             ))}
@@ -914,8 +956,9 @@ export default function CreatePage() {
   }
 
   if (stage === 'topic') {
+    const profileSummary = `Age ${profile.age} · ${profile.avatar.hairColor} ${profile.avatar.hairStyle} hair · ${profile.avatar.skinTone} skin · ${profile.avatar.favoriteOutfit}`;
     return (
-      <TopicInput profileName={profile.name} onSubmit={handleTopicSubmit} onChangeProfile={() => { setProfile(null); setStage('setup'); }} isLoading={false} provider={provider} onProviderChange={setProvider} onPresetSelect={handlePresetSelect} />
+      <TopicInput profileName={profile.name} profileAge={profile.age} profileSummary={profileSummary} onSubmit={handleTopicSubmit} onChangeProfile={() => { setProfile(null); setStage('setup'); }} isLoading={false} provider={provider} onProviderChange={setProvider} onPresetSelect={handlePresetSelect} />
     );
   }
 
