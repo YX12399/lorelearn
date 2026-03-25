@@ -20,82 +20,73 @@ export async function generateEpisode(profile: ChildProfile): Promise<Episode> {
   return parseEpisodeResponse(content.text, profile);
 }
 
-/**
- * Build a prompt that treats Claude as a cinematic scene director.
- * The output is optimized for AI video generation — rich visual descriptions,
- * camera directions, lighting, and motion cues rather than storybook prose.
- */
 function buildSceneDirectorPrompt(profile: ChildProfile): string {
   const { name, age, interests, learningTopic, avatar, sensoryPreferences } = profile;
 
-  // Build character description once — used as visual anchor
   const characterDesc = [
     `A ${age}-year-old child with ${avatar.hairColor} ${avatar.hairStyle} hair`,
     `${avatar.skinTone} skin, ${avatar.eyeColor} eyes`,
     `wearing ${avatar.favoriteOutfit}`,
   ].join(', ');
 
-  return `You are a CINEMATIC SCENE DIRECTOR creating an animated explainer video about "${learningTopic}" for a child named ${name}.
+  return `You are a cinematic scene director creating an animated educational video about "${learningTopic}" for ${name}, age ${age}.
 
-YOUR ROLE: Plan 5 scenes for a beautifully animated educational video. Each scene will be:
-1. Rendered as a HIGH-QUALITY AI-generated image (FLUX model)
-2. Animated into a 5-second video clip (Wan 2.1 model)
-3. Overlaid with voice narration (ElevenLabs)
-4. Stitched together into one cohesive explainer video
+YOUR TASK: Plan 5 scenes for a beautiful animated explainer video. Each scene will be:
+1. Rendered as a high-quality AI image
+2. Animated into a 5–10 second video clip
+3. Overlaid with warm voice narration
+4. Played sequentially as a cohesive learning experience
 
-CHILD'S CHARACTER (appears in EVERY scene):
+THE CHILD (appears in every scene):
 ${characterDesc}
 
-CHILD'S WORLD (weave these into the visuals):
-- Favorite animals: ${interests.animals.join(', ')}
-- Favorite colors: ${interests.colors.join(', ')}
-- Special interests: ${interests.specialInterests.join(', ')}
-- Favorite places: ${interests.places.join(', ')}
+THEIR WORLD (weave naturally into the visuals):
+- Animals they love: ${interests.animals.join(', ') || 'various animals'}
+- Favorite colors: ${interests.colors.join(', ') || 'bright colors'}
+- Special interests: ${interests.specialInterests.join(', ') || 'exploring and learning'}
+- Favorite places: ${interests.places.join(', ') || 'outdoors'}
 
-PACING: ${sensoryPreferences.preferredPace} pace, ${sensoryPreferences.audioSensitivity} audio sensitivity
+PACING: ${sensoryPreferences.preferredPace} · Audio sensitivity: ${sensoryPreferences.audioSensitivity}
 
----
+VISUAL PROMPT RULES (critical — this text generates the actual image):
+1. EVERY visualPrompt MUST begin with: "${characterDesc}"
+2. Describe ONE frozen moment — single camera angle, single action
+3. Include: lighting, color palette, depth of field, atmosphere
+4. Include: character pose, expression, hand position
+5. Include: background details and environmental storytelling
+6. Include: subtle motion cues (wind in hair, floating particles, rippling water)
+7. End every prompt with: "Studio Ghibli inspired, lush painted backgrounds, warm cinematic lighting, soft watercolor textures, 16:9 widescreen, masterpiece quality."
+8. Each prompt is SELF-CONTAINED — never reference other scenes
+9. 120–180 words of pure visual detail
 
-CRITICAL RULES FOR visualPrompt (this is what generates the actual video):
-
-1. EVERY visualPrompt MUST start with the EXACT character description: "${characterDesc}"
-2. Describe the scene as a SINGLE FROZEN MOMENT — one camera angle, one action
-3. Include: lighting direction, color palette, depth of field, atmosphere
-4. Include: character pose, expression, what they're doing with their hands
-5. Include: background details, environmental storytelling
-6. Include: motion cues for video animation (e.g., "wind gently blowing hair", "particles floating upward", "water rippling")
-7. Art style MUST be: "Studio Ghibli inspired, lush detailed backgrounds, warm cinematic lighting, soft watercolor textures, 16:9 widescreen composition"
-8. Each prompt must be SELF-CONTAINED — never reference other scenes
-9. Keep prompts under 200 words but RICH in visual detail
-
-RULES FOR narration (the voiceover that plays OVER the video):
-1. Narration should EXPLAIN the topic, not narrate actions
-2. Write as an enthusiastic, warm educator — like the best science YouTuber for kids
-3. 2-3 sentences per scene. Clear, engaging, builds understanding progressively
+NARRATION RULES (warm voiceover explaining the topic):
+1. Explain the science/concept — don't describe actions
+2. Write as a warm, enthusiastic educator — like the best science show host for kids
+3. 2–3 sentences per scene, building understanding progressively
 4. Use ${name}'s name to keep it personal
-5. Imagine David Attenborough explaining to a child — that tone
+5. Match the ${sensoryPreferences.preferredPace} pacing preference
 
-RULES FOR animationDirection (guides the video model):
-1. Describe what MOVES in the scene — character gestures, environmental motion
-2. Keep motion gentle and purposeful — no rapid camera moves
-3. Examples: "Character slowly turns head and points upward", "Leaves drift across frame", "Soft glow pulses from the diagram"
+ANIMATION DIRECTION (guides how the image becomes video):
+1. Describe what MOVES: character gestures, environmental motion
+2. Keep motion gentle and purposeful
+3. Examples: "Character slowly looks up in wonder", "Leaves drift gently across frame"
 
-EPISODE STRUCTURE:
-- Scene 1: WONDER — Open with ${name} encountering something amazing about ${learningTopic}. Hook them visually.
-- Scene 2: FOUNDATIONS — Explain the first core concept. Show it happening.
-- Scene 3: DEEP DIVE — The most important concept. Rich visual metaphor.
-- Scene 4: CONNECTION — How this connects to ${name}'s world and interests.
-- Scene 5: REVELATION — The "wow" moment. ${name} understands and it's beautiful.
+EPISODE ARC:
+- Scene 1 WONDER: ${name} encounters something amazing about ${learningTopic}
+- Scene 2 FOUNDATIONS: Explain the first core concept visually
+- Scene 3 DEEP DIVE: The key concept with a rich visual metaphor
+- Scene 4 CONNECTION: How this relates to ${name}'s world and interests
+- Scene 5 REVELATION: The "aha!" moment — ${name} understands and it's beautiful
 
-Respond ONLY with valid JSON:
+Respond with ONLY valid JSON (no markdown, no code fences):
 {
-  "title": "Compelling episode title",
-  "learningObjective": "One clear sentence: what ${name} will understand after watching",
+  "title": "Engaging episode title",
+  "learningObjective": "One sentence: what ${name} will understand",
   "scenes": [
     {
       "index": 0,
       "title": "Scene title",
-      "narration": "Voiceover narration — educational, warm, 2-3 sentences explaining the concept",
+      "narration": "Educational voiceover, 2-3 sentences",
       "dialogue": [],
       "emotionBeat": {
         "primaryEmotion": "wonder",
@@ -103,8 +94,8 @@ Respond ONLY with valid JSON:
         "intensity": 6,
         "teachingMoment": "Brief emotional insight"
       },
-      "visualPrompt": "FULL cinematic visual description starting with character, then environment, lighting, composition, motion cues, art style. 150-200 words of pure visual detail.",
-      "animationDirection": "What moves in the scene and how — gentle motion guidance for video generation",
+      "visualPrompt": "Full cinematic description starting with character...",
+      "animationDirection": "What moves and how",
       "transitionType": "crossfade",
       "duration": 8
     }
@@ -128,7 +119,7 @@ function parseEpisodeResponse(text: string, profile: ChildProfile): Episode {
       dialogue: s.dialogue || [],
       emotionBeat: s.emotionBeat,
       visualPrompt: s.visualPrompt,
-      animationDirection: s.animationDirection || '',
+      animationDirection: (s.animationDirection as string) || '',
       interactiveMoment: s.interactiveMoment || undefined,
       duration: (s.duration as number) || 8,
       transitionType: s.transitionType || 'crossfade',

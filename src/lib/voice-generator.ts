@@ -3,9 +3,9 @@ export async function generateVoiceNarration(
   voiceTone: 'calm' | 'warm' | 'energetic' = 'warm'
 ): Promise<{ audioUrl: string; duration: number }> {
   const VOICE_IDS: Record<string, string> = {
-    calm: 'pNInz6obpgDQGcFmaJgB', // Adam - calm
-    warm: 'EXAVITQu4vr4xnSDxMaL',  // Bella - warm
-    energetic: 'VR6AewLTigWG4xSOukaG', // Arnold - energetic
+    calm: 'pNInz6obpgDQGcFmaJgB',
+    warm: 'EXAVITQu4vr4xnSDxMaL',
+    energetic: 'VR6AewLTigWG4xSOukaG',
   };
 
   const voiceId = VOICE_IDS[voiceTone] || VOICE_IDS.warm;
@@ -34,23 +34,35 @@ export async function generateVoiceNarration(
   }
 
   const audioBuffer = await response.arrayBuffer();
-  const base64Audio = Buffer.from(audioBuffer).toString('base64');
-  const audioUrl = `data:audio/mpeg;base64,${base64Audio}`;
 
-  // Calculate actual duration from MP3 buffer size
-  // MP3 at 128kbps = 16000 bytes/second; ElevenLabs typically outputs ~128kbps
+  // Calculate duration from MP3 buffer size (ElevenLabs outputs ~128kbps)
   const byteLength = audioBuffer.byteLength;
-  const estimatedBitrate = 128000; // 128kbps in bits
+  const estimatedBitrate = 128000;
   const durationFromBytes = Math.ceil((byteLength * 8) / estimatedBitrate);
-  
-  // Also estimate from word count as a sanity check (~150 words/min)
   const wordCount = text.split(' ').length;
   const durationFromWords = Math.ceil((wordCount / 150) * 60);
-  
-  // Use the byte-based estimate (more accurate), but floor at word estimate
   const duration = Math.max(durationFromBytes, durationFromWords, 3);
 
-  console.log(`[Voice] Generated ${byteLength} bytes, estimated ${durationFromBytes}s (word est: ${durationFromWords}s), using ${duration}s`);
+  console.log(`[Voice] Generated ${byteLength} bytes (~${duration}s)`);
+
+  // Upload to Vercel Blob for persistent storage instead of base64 data URLs
+  let audioUrl: string;
+  try {
+    const { put } = await import('@vercel/blob');
+    const filename = `audio/narration_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.mp3`;
+    const blob = await put(filename, Buffer.from(audioBuffer), {
+      access: 'public',
+      contentType: 'audio/mpeg',
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+    });
+    audioUrl = blob.url;
+    console.log(`[Voice] Uploaded to Blob: ${audioUrl}`);
+  } catch (err) {
+    // Fallback to base64 if Blob is not configured
+    console.warn('[Voice] Blob upload failed, falling back to base64:', err);
+    const base64Audio = Buffer.from(audioBuffer).toString('base64');
+    audioUrl = `data:audio/mpeg;base64,${base64Audio}`;
+  }
 
   return { audioUrl, duration };
 }

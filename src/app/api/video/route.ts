@@ -15,9 +15,8 @@ export const maxDuration = 300;
 
 /**
  * POST /api/video
- * Two modes:
- *   - { mode: "submit", imageUrl, prompt, provider? } → returns { requestId }
- *   - { imageUrl, prompt, provider? } → blocking, returns { videoUrl }
+ *   { mode: "submit", imageUrl, prompt, duration?, provider? } → { requestId }
+ *   { imageUrl, prompt, duration?, provider? }                 → { videoUrl }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -26,34 +25,31 @@ export async function POST(request: NextRequest) {
     const { imageUrl, prompt, duration, mode, provider } = body;
 
     if (!imageUrl || !prompt) {
-      return NextResponse.json(
-        { error: 'imageUrl and prompt required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'imageUrl and prompt required' }, { status: 400 });
     }
 
     const isGoogle = provider === 'google';
 
-    // Validate API key availability
+    // Validate API key
     if (!isGoogle && !process.env.FAL_KEY) {
-      console.error('[Video] FAL_KEY environment variable is not set');
+      console.error('[Video] FAL_KEY not set');
       return NextResponse.json(
-        { error: 'FAL_KEY not configured. Please add it to your Vercel environment variables.' },
-        { status: 500 }
+        { status: 'FAILED', error: 'FAL_KEY not configured. Add it to Vercel environment variables.' },
+        { status: 200 }
       );
     }
     if (isGoogle && !process.env.GOOGLE_API_KEY) {
-      console.error('[Video] GOOGLE_API_KEY environment variable is not set');
+      console.error('[Video] GOOGLE_API_KEY not set');
       return NextResponse.json(
-        { error: 'GOOGLE_API_KEY not configured.' },
-        { status: 500 }
+        { status: 'FAILED', error: 'GOOGLE_API_KEY not configured.' },
+        { status: 200 }
       );
     }
 
     if (mode === 'submit') {
       const submit = isGoogle ? googleSubmit : falSubmit;
       const { requestId } = await submit(imageUrl, prompt, { duration });
-      console.log(`[Video] Submitted job: ${requestId} (provider: ${provider || 'fal'})`);
+      console.log(`[Video] Job submitted: ${requestId} (${provider || 'fal'})`);
       return NextResponse.json({ requestId, status: 'QUEUED' });
     }
 
@@ -62,13 +58,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
-    const errStack = error instanceof Error ? error.stack : '';
-    console.error('[Video] Generation error:', errMsg);
-    if (errStack) console.error('[Video] Stack:', errStack);
-    return NextResponse.json(
-      { error: errMsg || 'Video generation failed' },
-      { status: 500 }
-    );
+    console.error('[Video] POST error:', errMsg);
+
+    // Return FAILED with 200 so the client stops retrying for known errors
+    if (errMsg.includes('Unauthorized') || errMsg.includes('401') || errMsg.includes('not found') || errMsg.includes('FAL_KEY')) {
+      return NextResponse.json({ status: 'FAILED', error: errMsg }, { status: 200 });
+    }
+
+    return NextResponse.json({ error: errMsg || 'Video generation failed' }, { status: 500 });
   }
 }
 
@@ -84,12 +81,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'requestId required' }, { status: 400 });
     }
 
-    // Validate API key availability
+    // Validate API key
     if (provider !== 'google' && !process.env.FAL_KEY) {
-      console.error('[Video] FAL_KEY not set for status check');
       return NextResponse.json(
-        { error: 'FAL_KEY not configured', status: 'FAILED' },
-        { status: 500 }
+        { status: 'FAILED', error: 'FAL_KEY not configured' },
+        { status: 200 }
       );
     }
 
@@ -98,20 +94,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
-    console.error(`[Video] Status check error for requestId=${request.nextUrl.searchParams.get('requestId')}:`, errMsg);
-    
-    // If the error is about an invalid/expired request, return FAILED status
-    // so the client stops polling instead of retrying forever
-    if (errMsg.includes('not found') || errMsg.includes('NOT_FOUND') || errMsg.includes('expired') || errMsg.includes('Unauthorized') || errMsg.includes('401')) {
-      return NextResponse.json(
-        { status: 'FAILED', error: errMsg },
-        { status: 200 } // Return 200 with FAILED status so client handles it gracefully
-      );
+    console.error(`[Video] GET error (${request.nextUrl.searchParams.get('requestId')}):`, errMsg);
+
+    // Return FAILED with 200 for unrecoverable errors to stop infinite polling
+    if (
+      errMsg.includes('not found') || errMsg.includes('NOT_FOUND') ||
+      errMsg.includes('expired') || errMsg.includes('Unauthorized') ||
+      errMsg.includes('401')
+    ) {
+      return NextResponse.json({ status: 'FAILED', error: errMsg }, { status: 200 });
     }
-    
-    return NextResponse.json(
-      { error: errMsg || 'Status check failed' },
-      { status: 500 }
-    );
+
+    return NextResponse.json({ error: errMsg || 'Status check failed' }, { status: 500 });
   }
 }

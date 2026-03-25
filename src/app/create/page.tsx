@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import ProfileForm from '@/components/ProfileForm';
 import { ChildProfile, Episode } from '@/types';
@@ -18,49 +18,35 @@ function getCustomPresets(): Record<string, ProfilePreset> {
 import { Provider, PROVIDER_LABELS } from '@/lib/providers';
 import { saveEpisodeToHistory, type SavedEpisode } from '@/lib/episode-storage';
 
-// Helper function to upload assets to permanent storage
-async function uploadAssetToStorage(
+// Upload asset to permanent Blob storage
+async function uploadAsset(
   url: string,
   type: 'image' | 'video' | 'audio',
   episodeId: string,
   sceneIndex: number
 ): Promise<string> {
   try {
-    const response = await fetch('/api/assets/upload', {
+    const resp = await fetch('/api/assets/upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url, type, episodeId, sceneIndex }),
     });
-    if (response.ok) {
-      const { permanentUrl } = await response.json();
-      if (permanentUrl) {
-        console.log('[Asset Storage] Uploaded', type, 'for scene', sceneIndex);
-        return permanentUrl;
-      }
+    if (resp.ok) {
+      const { permanentUrl } = await resp.json();
+      if (permanentUrl) return permanentUrl;
     }
   } catch (err) {
-    console.error('[Asset Storage] Upload failed:', err);
+    console.warn(`[Assets] Upload failed for ${type} scene ${sceneIndex}:`, err);
   }
-  return url; // Return original URL as fallback
+  return url;
 }
 
-// ─── Topic Input with Profile Selector & Provider Picker ────────────────────
+// ─── Topic Input ────────────────────────────────────────────────────────────
 function TopicInput({
-  profileName,
-  profileAge,
-  profileSummary,
-  onSubmit,
-  onChangeProfile,
-  isLoading,
-  provider,
-  onProviderChange,
-  onPresetSelect,
+  profile, onSubmit, isLoading, provider, onProviderChange, onPresetSelect,
 }: {
-  profileName: string;
-  profileAge: number;
-  profileSummary: string;
+  profile: Omit<ChildProfile, 'learningTopic'>;
   onSubmit: (topic: string) => void;
-  onChangeProfile: () => void;
   isLoading: boolean;
   provider: Provider;
   onProviderChange: (p: Provider) => void;
@@ -68,7 +54,6 @@ function TopicInput({
 }) {
   const [topic, setTopic] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
-
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -85,21 +70,26 @@ function TopicInput({
     'Why dinosaurs went extinct',
   ];
 
+  const { name, age, avatar } = profile;
+  const summary = `Age ${age} · ${avatar.hairColor} ${avatar.hairStyle} hair · ${avatar.skinTone} skin · ${avatar.favoriteOutfit}`;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 flex flex-col items-center justify-center p-6">
       <div className="max-w-2xl w-full">
+        {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent mb-3">
             LoreLearn
           </h1>
           <p className="text-purple-300 text-lg">
-            Hey {profileName}! What do you want to learn about today?
+            Hey {name}! What do you want to learn about today?
           </p>
           <div className="mt-3 inline-block bg-white/5 border border-white/10 rounded-xl px-4 py-2">
-            <p className="text-white/50 text-xs">{profileSummary}</p>
+            <p className="text-white/50 text-xs">{summary}</p>
           </div>
         </div>
 
+        {/* Selectors */}
         <div className="flex gap-3 mb-6">
           <div className="flex-1">
             <label className="block text-xs text-white/40 mb-1.5 uppercase tracking-wider">Learner</label>
@@ -108,7 +98,7 @@ function TopicInput({
               onChange={(e) => { if (e.target.value) onPresetSelect(e.target.value); }}
               className="w-full py-2.5 px-4 bg-white/10 border border-white/20 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 appearance-none cursor-pointer"
             >
-              <option value="" disabled className="bg-gray-900">{profileName} (active)</option>
+              <option value="" disabled className="bg-gray-900">{name} (active)</option>
               {Object.entries({ ...PROFILE_PRESETS, ...getCustomPresets() }).map(([key, preset]) => (
                 <option key={key} value={key} className="bg-gray-900">{preset.label}</option>
               ))}
@@ -128,6 +118,7 @@ function TopicInput({
           </div>
         </div>
 
+        {/* Topic input */}
         <form onSubmit={handleSubmit} className="mb-8">
           <div className="relative">
             <input
@@ -158,6 +149,7 @@ function TopicInput({
           </div>
         </form>
 
+        {/* Suggestions */}
         <div className="flex flex-wrap gap-2 justify-center mb-8">
           {suggestions.map((s) => (
             <button
@@ -171,16 +163,14 @@ function TopicInput({
           ))}
         </div>
 
+        {/* Links */}
         <div className="text-center flex gap-4 justify-center">
-          <a href="/profile" className="text-sm text-white/30 hover:text-white/60 transition-colors">
+          <Link href="/profile" className="text-sm text-white/30 hover:text-white/60 transition-colors">
             Edit profiles
-          </a>
-          <a href="/history" className="text-sm text-white/30 hover:text-white/60 transition-colors">
+          </Link>
+          <Link href="/history" className="text-sm text-white/30 hover:text-white/60 transition-colors">
             Episode history
-          </a>
-          <button onClick={onChangeProfile} className="text-sm text-white/30 hover:text-white/60 transition-colors">
-            Full profile form
-          </button>
+          </Link>
         </div>
       </div>
     </div>
@@ -194,28 +184,45 @@ interface SceneStatus {
   imageStatus: 'pending' | 'generating' | 'complete' | 'error';
   voiceStatus: 'pending' | 'generating' | 'complete' | 'error';
   videoStatus: 'pending' | 'generating' | 'complete' | 'error';
-  videoRequestId?: string;
+}
+
+function StatusDot({ status, label }: { status: string; label: string }) {
+  const colors: Record<string, string> = {
+    pending: 'bg-white/20',
+    generating: 'bg-yellow-400 animate-pulse',
+    complete: 'bg-green-400',
+    error: 'bg-red-400',
+  };
+  return (
+    <div className="flex flex-col items-center gap-0.5" title={`${label}: ${status}`}>
+      <div className={`w-2.5 h-2.5 rounded-full ${colors[status] || 'bg-white/20'}`} />
+      <span className="text-[9px] text-white/30">{label}</span>
+    </div>
+  );
 }
 
 function GenerationProgress({
-  stage, topic, sceneCount, sceneStatuses, provider, sceneTitles, sceneThumbnails,
+  stage, topic, sceneStatuses, provider, sceneTitles, sceneThumbnails,
 }: {
-  stage: GenerationStage; topic: string; sceneCount: number; sceneStatuses: SceneStatus[]; provider: Provider; sceneTitles?: string[]; sceneThumbnails?: (string | undefined)[];
+  stage: GenerationStage;
+  topic: string;
+  sceneStatuses: SceneStatus[];
+  provider: Provider;
+  sceneTitles?: string[];
+  sceneThumbnails?: (string | undefined)[];
 }) {
   const stages: { key: GenerationStage; label: string; icon: string }[] = [
-    { key: 'story', label: 'Planning scenes (Claude)', icon: '🎬' },
+    { key: 'story', label: 'Planning scenes', icon: '🎬' },
     { key: 'images', label: `Creating visuals (${provider === 'google' ? 'Gemini' : 'Nano Banana Pro'})`, icon: '🎨' },
     { key: 'voices', label: 'Recording narration (ElevenLabs)', icon: '🎙️' },
     { key: 'videos', label: `Animating scenes (${provider === 'google' ? 'Veo 3' : 'Kling 3.0'})`, icon: '✨' },
   ];
 
   const stageIndex = stages.findIndex((s) => s.key === stage);
-
-  // Calculate overall progress
-  const totalSteps = sceneStatuses.length * 3; // image + voice + video per scene
-  const completedSteps = sceneStatuses.reduce((sum, s) => {
-    return sum + (s.imageStatus === 'complete' ? 1 : 0) + (s.voiceStatus === 'complete' ? 1 : 0) + (s.videoStatus === 'complete' ? 1 : 0);
-  }, 0);
+  const totalSteps = sceneStatuses.length * 3;
+  const completedSteps = sceneStatuses.reduce((sum, s) =>
+    sum + (s.imageStatus === 'complete' ? 1 : 0) + (s.voiceStatus === 'complete' ? 1 : 0) + (s.videoStatus === 'complete' ? 1 : 0),
+  0);
   const overallProgress = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : (stage === 'story' ? 5 : 0);
 
   return (
@@ -227,14 +234,17 @@ function GenerationProgress({
           <p className="text-purple-300 text-sm">&ldquo;{topic}&rdquo;</p>
         </div>
 
-        {/* Overall progress bar */}
+        {/* Progress bar */}
         <div className="mb-8">
           <div className="flex justify-between text-xs text-white/50 mb-2">
             <span>Overall progress</span>
             <span>{overallProgress}%</span>
           </div>
           <div className="h-3 bg-white/10 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-amber-400 rounded-full transition-all duration-700 ease-out" style={{ width: `${overallProgress}%` }} />
+            <div
+              className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-amber-400 rounded-full transition-all duration-700 ease-out"
+              style={{ width: `${overallProgress}%` }}
+            />
           </div>
         </div>
 
@@ -262,7 +272,7 @@ function GenerationProgress({
           })}
         </div>
 
-        {/* Per-scene progress (visible once we have scene data) */}
+        {/* Per-scene progress */}
         {sceneStatuses.length > 0 && stage !== 'story' && (
           <div className="border-t border-white/10 pt-6">
             <p className="text-xs text-white/40 uppercase tracking-wider mb-3">Scene Progress</p>
@@ -296,39 +306,24 @@ function GenerationProgress({
   );
 }
 
-function StatusDot({ status, label }: { status: string; label: string }) {
-  const colors: Record<string, string> = {
-    pending: 'bg-white/20',
-    generating: 'bg-yellow-400 animate-pulse',
-    complete: 'bg-green-400',
-    error: 'bg-red-400',
-  };
-  return (
-    <div className="flex flex-col items-center gap-0.5" title={`${label}: ${status}`}>
-      <div className={`w-2.5 h-2.5 rounded-full ${colors[status] || 'bg-white/20'}`} />
-      <span className="text-[9px] text-white/30">{label}</span>
-    </div>
-  );
-}
-
-// ─── Video Player ───────────────────────────────────────────────────────────
-function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void }) {
+// ─── Video / Slideshow Player ───────────────────────────────────────────────
+function EpisodePlayer({ episode, onBack }: { episode: Episode; onBack: () => void }) {
   const [currentScene, setCurrentScene] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-  const [savedToHistory, setSavedToHistory] = useState(false);
-  const [stitching, setStitching] = useState(false);
-  const [stitchedUrl, setStitchedUrl] = useState<string | null>(null);
   const audioRefs = useRef<(HTMLAudioElement | null)[]>([]);
   const autoAdvanceRef = useRef(true);
 
+  // Determine display mode: video or slideshow (image + audio)
   const scenesWithVideo = episode.scenes.filter((s) => s.generatedVideo?.url);
-  const scene = scenesWithVideo[currentScene];
+  const scenesWithImages = episode.scenes.filter((s) => s.generatedImage?.url);
+  const isSlideshow = scenesWithVideo.length === 0 && scenesWithImages.length > 0;
+  const displayScenes = isSlideshow ? scenesWithImages : scenesWithVideo;
+  const scene = displayScenes[currentScene];
 
-  // Pre-load all audio elements
+  // Pre-load audio for each displayable scene
   useEffect(() => {
-    audioRefs.current = scenesWithVideo.map((s) => {
+    audioRefs.current = displayScenes.map((s) => {
       if (!s.generatedAudio?.url) return null;
       const audio = new Audio(s.generatedAudio.url);
       audio.preload = 'auto';
@@ -340,13 +335,11 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [episode.id]);
 
-  // When scene changes, sync audio
+  // Sync audio when scene changes
   useEffect(() => {
-    // Pause all other audio
     audioRefs.current.forEach((a, i) => {
       if (a && i !== currentScene) { a.pause(); a.currentTime = 0; }
     });
-    // If we're playing, start the new scene's audio
     if (isPlaying) {
       const audio = audioRefs.current[currentScene];
       if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
@@ -354,56 +347,50 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentScene]);
 
-  const saveToHistory = () => {
-    const saved: SavedEpisode = {
-      id: episode.id,
-      title: episode.title,
-      topic: episode.childProfile?.learningTopic || '',
-      childName: episode.childProfile?.name || 'Unknown',
-      provider: 'fal',
-      createdAt: new Date().toISOString(),
-      thumbnail: episode.scenes[0]?.generatedImage?.url,
-      scenes: episode.scenes.map((s, i) => ({
-        index: i,
-        narration: s.narration,
-        videoUrl: s.generatedVideo?.url,
-        audioUrl: s.generatedAudio?.url,
-        imageUrl: s.generatedImage?.url,
-      })),
-    };
-    saveEpisodeToHistory(saved);
-    setSavedToHistory(true);
-  };
+  const advanceToNextScene = useCallback(() => {
+    if (!autoAdvanceRef.current) return;
+    if (currentScene < displayScenes.length - 1) {
+      const next = currentScene + 1;
+      setCurrentScene(next);
+      setTimeout(() => {
+        if (videoRef.current) videoRef.current.play().catch(() => {});
+        const nextAudio = audioRefs.current[next];
+        if (nextAudio) { nextAudio.currentTime = 0; nextAudio.play().catch(() => {}); }
+      }, 200);
+    } else {
+      setIsPlaying(false);
+    }
+  }, [currentScene, displayScenes.length]);
 
-  // If no videos but we have images, fall back to slideshow mode
-  const scenesWithImages = episode.scenes.filter((s) => s.generatedImage?.url);
-  const useSlideshowMode = scenesWithVideo.length === 0 && scenesWithImages.length > 0;
-  
-  if (!scene && !useSlideshowMode) {
+  // In slideshow mode, auto-advance when narration ends
+  useEffect(() => {
+    if (!isSlideshow || !isPlaying) return;
+    const audio = audioRefs.current[currentScene];
+    if (!audio) return;
+    const onEnd = () => advanceToNextScene();
+    audio.addEventListener('ended', onEnd);
+    return () => audio.removeEventListener('ended', onEnd);
+  }, [isSlideshow, isPlaying, currentScene, advanceToNextScene]);
+
+  if (!scene) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 flex flex-col items-center justify-center text-white gap-6 p-6">
         <div className="text-5xl">😔</div>
         <p className="text-xl font-semibold">Video generation didn&apos;t complete</p>
         <p className="text-white/50 text-sm text-center max-w-md">
-          The story and images were created, but animated videos couldn&apos;t be generated. 
-          This usually means the FAL_KEY isn&apos;t configured or the video service is temporarily unavailable.
+          The story was created but media couldn&apos;t be generated.
+          This usually means an API key isn&apos;t configured or the service is temporarily unavailable.
         </p>
-        <div className="flex gap-3">
-          <button onClick={onBack} className="px-6 py-3 bg-purple-600 rounded-xl hover:bg-purple-700 transition-colors">Try another topic</button>
-        </div>
+        <button onClick={onBack} className="px-6 py-3 bg-purple-600 rounded-xl hover:bg-purple-700 transition-colors">
+          Try another topic
+        </button>
       </div>
     );
   }
-  
-  // Slideshow fallback: use images instead of videos
-  const displayScenes = useSlideshowMode ? scenesWithImages : scenesWithVideo;
-  const displayScene = displayScenes[currentScene];
-  
-  if (!displayScene) return null;
 
   const playScene = () => {
     setIsPlaying(true);
-    if (videoRef.current) videoRef.current.play().catch(() => {});
+    if (!isSlideshow && videoRef.current) videoRef.current.play().catch(() => {});
     const audio = audioRefs.current[currentScene];
     if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
   };
@@ -416,173 +403,119 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
   };
 
   const handleVideoEnded = () => {
-    // Check if narration for this scene is still playing
     const audio = audioRefs.current[currentScene];
     const narrationStillPlaying = audio && !audio.paused && !audio.ended;
-
     if (narrationStillPlaying) {
-      // Loop the video until narration finishes
       if (videoRef.current) {
         videoRef.current.currentTime = Math.max(0, (videoRef.current.duration || 5) - 2);
         videoRef.current.play().catch(() => {});
       }
-      // Set up a listener for when narration ends to auto-advance
       const onNarrationEnd = () => {
         audio.removeEventListener('ended', onNarrationEnd);
         advanceToNextScene();
       };
       audio.addEventListener('ended', onNarrationEnd);
     } else {
-      // Narration done or no narration — advance immediately
       advanceToNextScene();
-    }
-  };
-
-  const advanceToNextScene = () => {
-    if (!autoAdvanceRef.current) return;
-    if (currentScene < scenesWithVideo.length - 1) {
-      const nextIdx = currentScene + 1;
-      setCurrentScene(nextIdx);
-      setTimeout(() => {
-        if (videoRef.current) videoRef.current.play().catch(() => {});
-        const nextAudio = audioRefs.current[nextIdx];
-        if (nextAudio) { nextAudio.currentTime = 0; nextAudio.play().catch(() => {}); }
-      }, 200);
-    } else {
-      setIsPlaying(false);
     }
   };
 
   const goToScene = (idx: number) => {
     autoAdvanceRef.current = true;
-    // Stop current audio
     const curAudio = audioRefs.current[currentScene];
     if (curAudio) { curAudio.pause(); curAudio.currentTime = 0; }
     setCurrentScene(idx);
     setIsPlaying(false);
   };
 
-  const downloadScene = async (sceneIdx: number) => {
-    const s = scenesWithVideo[sceneIdx];
-    if (!s?.generatedVideo?.url) return;
+  const downloadFile = async (url: string, filename: string) => {
     try {
-      const resp = await fetch(s.generatedVideo.url);
+      const resp = await fetch(url);
       const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
-      a.download = `${episode.title.replace(/[^a-zA-Z0-9]/g, '_')}_scene_${sceneIdx + 1}.mp4`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      a.href = blobUrl; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error('Download failed:', err);
     }
   };
 
-  const stitchFullEpisode = async () => {
-    setStitching(true);
-    try {
-      const scenes = scenesWithVideo.map((s) => ({
-        videoUrl: s.generatedVideo!.url,
-        audioUrl: s.generatedAudio?.url,
-        duration: s.generatedAudio?.duration || s.generatedVideo!.duration || 5,
-      }));
-      const resp = await fetch('/api/stitch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ episodeId: episode.id, title: episode.title, scenes }),
-      });
-      const data = await resp.json();
-      if (resp.ok && data.videoUrl) {
-        setStitchedUrl(data.videoUrl);
-      } else {
-        console.error('[Stitch] Failed:', data.error);
-        alert(data.error || 'Video stitching failed. FFmpeg may not be available on this server.');
-      }
-    } catch (err) {
-      console.error('[Stitch] Error:', err);
-      alert('Video stitching failed — check console for details.');
-    }
-    setStitching(false);
-  };
-
-  const downloadAll = async () => {
-    setDownloading(true);
-    for (let i = 0; i < scenesWithVideo.length; i++) {
-      await downloadScene(i);
-      await new Promise((r) => setTimeout(r, 500));
-    }
-    setDownloading(false);
-  };
-
-  const downloadNarration = async (sceneIdx: number) => {
-    const s = scenesWithVideo[sceneIdx];
-    if (!s?.generatedAudio?.url) return;
-    try {
-      const resp = await fetch(s.generatedAudio.url);
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${episode.title.replace(/[^a-zA-Z0-9]/g, '_')}_narration_${sceneIdx + 1}.mp3`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('Download narration failed:', err);
-    }
-  };
+  const safeTitle = episode.title.replace(/[^a-zA-Z0-9]/g, '_');
 
   return (
     <div className="min-h-screen bg-black flex flex-col">
+      {/* Main display */}
       <div className="flex-1 relative flex items-center justify-center">
-        {useSlideshowMode ? (
-          <img src={displayScene.generatedImage?.url} alt={displayScene.title} className="max-w-full max-h-[70vh] rounded-lg object-contain" />
+        {isSlideshow ? (
+          <img
+            src={scene.generatedImage?.url}
+            alt={scene.title}
+            className="max-w-full max-h-[70vh] rounded-lg object-contain"
+          />
         ) : (
-          <video ref={videoRef} key={displayScene.generatedVideo?.url} src={displayScene.generatedVideo?.url} className="max-w-full max-h-[70vh] rounded-lg" onEnded={handleVideoEnded} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} playsInline />
+          <video
+            ref={videoRef}
+            key={scene.generatedVideo?.url}
+            src={scene.generatedVideo?.url}
+            className="max-w-full max-h-[70vh] rounded-lg"
+            onEnded={handleVideoEnded}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            playsInline
+          />
         )}
-        {!isPlaying && !useSlideshowMode && (
+
+        {/* Play/pause overlay */}
+        {!isPlaying && (
           <button onClick={playScene} className="absolute inset-0 flex items-center justify-center bg-black/40">
             <div className="w-20 h-20 bg-white/20 backdrop-blur-xl rounded-full flex items-center justify-center hover:bg-white/30 transition-all">
               <svg className="w-10 h-10 text-white ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
             </div>
           </button>
         )}
-        {isPlaying && !useSlideshowMode && (
+        {isPlaying && (
           <button onClick={pauseScene} className="absolute top-4 right-4 w-10 h-10 bg-black/50 backdrop-blur rounded-full flex items-center justify-center hover:bg-black/70 transition-all">
             <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
           </button>
         )}
+
+        {/* Slideshow nav arrows */}
+        {isSlideshow && (
+          <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 flex justify-between px-4 pointer-events-none">
+            {currentScene > 0 ? (
+              <button onClick={() => goToScene(currentScene - 1)} className="pointer-events-auto w-10 h-10 bg-black/50 backdrop-blur rounded-full flex items-center justify-center hover:bg-black/70 transition-all">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+              </button>
+            ) : <div />}
+            {currentScene < displayScenes.length - 1 ? (
+              <button onClick={() => goToScene(currentScene + 1)} className="pointer-events-auto w-10 h-10 bg-black/50 backdrop-blur rounded-full flex items-center justify-center hover:bg-black/70 transition-all">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </button>
+            ) : <div />}
+          </div>
+        )}
+
+        {/* Narration subtitle */}
         <div className="absolute bottom-4 left-4 right-4">
           <div className="bg-black/70 backdrop-blur-sm rounded-xl px-6 py-3 text-center">
-            <p className="text-white text-sm leading-relaxed">{displayScene.narration}</p>
+            <p className="text-white text-sm leading-relaxed">{scene.narration}</p>
           </div>
         </div>
       </div>
-      {useSlideshowMode && (
-        <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 flex justify-between px-4 pointer-events-none">
-          {currentScene > 0 && (
-            <button onClick={() => goToScene(currentScene - 1)} className="pointer-events-auto w-10 h-10 bg-black/50 backdrop-blur rounded-full flex items-center justify-center hover:bg-black/70 transition-all">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-            </button>
-          )}
-          <div />
-          {currentScene < displayScenes.length - 1 && (
-            <button onClick={() => goToScene(currentScene + 1)} className="pointer-events-auto w-10 h-10 bg-black/50 backdrop-blur rounded-full flex items-center justify-center hover:bg-black/70 transition-all">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-            </button>
-          )}
-        </div>
-      )}
+
+      {/* Controls bar */}
       <div className="bg-gradient-to-t from-black to-transparent p-6">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-white font-bold text-lg">{episode.title}</h2>
-            <span className="text-purple-400 text-sm">{useSlideshowMode ? '📸 Slideshow' : ''} Scene {currentScene + 1} of {displayScenes.length}</span>
+            <span className="text-purple-400 text-sm">
+              {isSlideshow && '📸 '} Scene {currentScene + 1} of {displayScenes.length}
+            </span>
           </div>
+
+          {/* Scene dots */}
           <div className="flex gap-2 justify-center mb-4">
             {displayScenes.map((_, i) => (
               <button key={i} onClick={() => goToScene(i)}
@@ -592,79 +525,47 @@ function VideoPlayer({ episode, onBack }: { episode: Episode; onBack: () => void
 
           {/* Download controls */}
           <div className="flex gap-2 justify-center mb-4 flex-wrap">
-            <button
-              onClick={() => downloadScene(currentScene)}
-              className="px-4 py-2 bg-blue-500/20 text-blue-300 rounded-lg hover:bg-blue-500/30 text-sm transition-colors flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-              Scene {currentScene + 1} Video
-            </button>
+            {scene.generatedVideo?.url && (
+              <button
+                onClick={() => downloadFile(scene.generatedVideo!.url, `${safeTitle}_scene_${currentScene + 1}.mp4`)}
+                className="px-4 py-2 bg-blue-500/20 text-blue-300 rounded-lg hover:bg-blue-500/30 text-sm transition-colors flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                Video
+              </button>
+            )}
             {scene.generatedAudio?.url && (
               <button
-                onClick={() => downloadNarration(currentScene)}
+                onClick={() => downloadFile(scene.generatedAudio!.url, `${safeTitle}_narration_${currentScene + 1}.mp3`)}
                 className="px-4 py-2 bg-green-500/20 text-green-300 rounded-lg hover:bg-green-500/30 text-sm transition-colors flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                Narration
+                Audio
               </button>
             )}
-            <button
-              onClick={downloadAll}
-              disabled={downloading}
-              className="px-4 py-2 bg-purple-500/20 text-purple-300 rounded-lg hover:bg-purple-500/30 text-sm transition-colors flex items-center gap-2 disabled:opacity-50"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-              {downloading ? 'Downloading...' : 'All Scenes'}
-            </button>
-          </div>
-
-          {/* Full Episode Stitch */}
-          <div className="flex gap-2 justify-center mb-4">
-            {stitchedUrl ? (
-              <a
-                href={stitchedUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-5 py-2.5 bg-gradient-to-r from-green-500/30 to-emerald-500/30 text-green-300 rounded-lg hover:from-green-500/40 hover:to-emerald-500/40 text-sm transition-colors flex items-center gap-2 font-medium"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                Watch Full Episode
-              </a>
-            ) : (
+            {scene.generatedImage?.url && (
               <button
-                onClick={stitchFullEpisode}
-                disabled={stitching}
-                className="px-5 py-2.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-300 rounded-lg hover:from-amber-500/30 hover:to-orange-500/30 text-sm transition-colors flex items-center gap-2 font-medium disabled:opacity-50"
+                onClick={() => downloadFile(scene.generatedImage!.url, `${safeTitle}_scene_${currentScene + 1}.png`)}
+                className="px-4 py-2 bg-amber-500/20 text-amber-300 rounded-lg hover:bg-amber-500/30 text-sm transition-colors flex items-center gap-2"
               >
-                {stitching ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Stitching full episode...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V20M17 4V20M3 8H7M17 8H21M3 12H21M3 16H7M17 16H21M4 20H20C20.5523 20 21 19.5523 21 19V5C21 4.44772 20.5523 4 20 4H4C3.44772 4 3 4.44772 3 5V19C3 19.5523 3.44772 20 4 20Z" /></svg>
-                    Stitch Full Episode
-                  </>
-                )}
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                Image
               </button>
             )}
           </div>
 
+          {/* Navigation */}
           <div className="flex justify-between items-center">
-            <button onClick={onBack} className="px-6 py-2 text-white/50 hover:text-white text-sm transition-colors">New topic</button>
+            <button onClick={onBack} className="px-6 py-2 text-white/50 hover:text-white text-sm transition-colors">
+              New topic
+            </button>
             <div className="flex gap-2">
-              <button
-                onClick={saveToHistory}
-                className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${savedToHistory ? 'bg-green-500/20 text-green-300' : 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'}`}
-              >
-                {savedToHistory ? 'Saved!' : 'Save to History'}
+              <Link href="/history" className="px-5 py-2 bg-white/10 text-white/70 rounded-lg hover:bg-white/20 text-sm transition-colors">
+                History
+              </Link>
+              <button onClick={() => goToScene(0)} className="px-5 py-2 bg-purple-500/20 text-purple-300 rounded-lg hover:bg-purple-500/30 text-sm transition-colors">
+                Replay
               </button>
-              <a href="/history" className="px-5 py-2 bg-white/10 text-white/70 rounded-lg hover:bg-white/20 text-sm transition-colors">History</a>
-              <button onClick={() => { goToScene(0); }} className="px-5 py-2 bg-purple-500/20 text-purple-300 rounded-lg hover:bg-purple-500/30 text-sm transition-colors">Replay</button>
             </div>
           </div>
         </div>
@@ -684,12 +585,12 @@ export default function CreatePage() {
   const [sceneStatuses, setSceneStatuses] = useState<SceneStatus[]>([]);
   const [provider, setProvider] = useState<Provider>('fal');
 
+  // Load saved profile on mount
   useEffect(() => {
-    // Prefer custom profile from localStorage (edited via Profile Editor) over hardcoded preset
     const customPresets = getCustomPresets();
-    const sania = customPresets['sania'] || PROFILE_PRESETS.sania;
-    if (sania) {
-      setProfile({ ...sania.profile, id: 'preset-sania' } as Omit<ChildProfile, 'learningTopic'> & { id: string });
+    const preset = customPresets['sania'] || PROFILE_PRESETS.sania;
+    if (preset) {
+      setProfile({ ...preset.profile, id: 'preset-sania' } as Omit<ChildProfile, 'learningTopic'> & { id: string });
       setStage('topic');
     }
   }, []);
@@ -711,7 +612,7 @@ export default function CreatePage() {
     setStage('topic');
   };
 
-  // ─── Full Generation Pipeline ──────────────────────────
+  // ─── Generation Pipeline ──────────────────────────────
   const handleTopicSubmit = async (selectedTopic: string) => {
     if (!profile) return;
     setTopic(selectedTopic);
@@ -722,26 +623,30 @@ export default function CreatePage() {
     const fullProfile: ChildProfile = { ...profile, learningTopic: selectedTopic } as ChildProfile;
 
     try {
-      // 1. Story
+      // 1. Generate story script
       const storyResp = await fetch('/api/story', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ profile: fullProfile }),
       });
-      if (!storyResp.ok) throw new Error('Story generation failed');
+      if (!storyResp.ok) {
+        const errData = await storyResp.json().catch(() => ({}));
+        throw new Error(errData.error || 'Story generation failed');
+      }
       const { episode: ep } = await storyResp.json();
       setEpisode(ep);
 
       const totalScenes = ep.scenes.length;
       setSceneStatuses(ep.scenes.map(() => ({
-        imageStatus: 'pending' as const, voiceStatus: 'pending' as const, videoStatus: 'pending' as const,
+        imageStatus: 'pending' as const,
+        voiceStatus: 'pending' as const,
+        videoStatus: 'pending' as const,
       })));
 
-      // 2. Images (sequential for cohesion)
-      // *** LOCAL tracking — never rely on React state for pipeline data ***
+      // 2. Generate images sequentially (for character consistency)
       setGenStage('images');
       let characterRefUrl: string | undefined;
-      const sceneImageUrls: Map<number, string> = new Map();
+      const sceneImageUrls = new Map<number, string>();
 
       for (let i = 0; i < ep.scenes.length; i++) {
         const scene = ep.scenes[i];
@@ -760,17 +665,15 @@ export default function CreatePage() {
           const data = await resp.json();
           if (!resp.ok) throw new Error(data.error);
 
-          // Track locally — this is the source of truth for the video step
           sceneImageUrls.set(i, data.imageUrl);
           if (isFirst) characterRefUrl = data.imageUrl;
 
-          // Upload image to permanent storage
-          const permanentImageUrl = await uploadAssetToStorage(data.imageUrl, 'image', ep.id, i);
+          const permanentUrl = await uploadAsset(data.imageUrl, 'image', ep.id, i);
 
           setEpisode((prev) => {
             if (!prev) return null;
             const scenes = [...prev.scenes];
-            scenes[i] = { ...scenes[i], generatedImage: { url: permanentImageUrl, prompt: cohesivePrompt, seed: data.seed, isCharacterReference: isFirst, frameIndex: i } };
+            scenes[i] = { ...scenes[i], generatedImage: { url: permanentUrl, prompt: cohesivePrompt, seed: data.seed, isCharacterReference: isFirst, frameIndex: i } };
             if (isFirst) return { ...prev, scenes, continuityBible: { ...prev.continuityBible, characterReferenceImageUrl: data.imageUrl } };
             return { ...prev, scenes };
           });
@@ -781,10 +684,10 @@ export default function CreatePage() {
         }
       }
 
-      // 3. Voices (parallel) — generate BEFORE videos so we know narration duration
+      // 3. Generate voices in parallel (before videos for duration sync)
       setGenStage('voices');
       const voiceTone = fullProfile.sensoryPreferences.preferredVoiceTone;
-      const sceneAudioDurations: Map<number, number> = new Map();
+      const sceneAudioDurations = new Map<number, number>();
 
       await Promise.all(ep.scenes.map(async (scene: typeof ep.scenes[0], i: number) => {
         setSceneStatuses((prev) => { const n = [...prev]; n[i] = { ...n[i], voiceStatus: 'generating' }; return n; });
@@ -797,16 +700,13 @@ export default function CreatePage() {
           const data = await resp.json();
           if (!resp.ok) throw new Error(data.error);
 
-          // Track audio duration locally for video sync
           sceneAudioDurations.set(i, data.duration);
-          console.log(`[Pipeline] Voice scene ${i}: ${data.duration}s`);
 
-          const permanentAudioUrl = await uploadAssetToStorage(data.audioUrl, 'audio', ep.id, i);
-
+          // Audio is now uploaded to Blob by the API — no need for separate upload
           setEpisode((prev) => {
             if (!prev) return null;
             const scenes = [...prev.scenes];
-            scenes[i] = { ...scenes[i], generatedAudio: { url: permanentAudioUrl, text: scene.narration, voiceId: voiceTone, duration: data.duration } };
+            scenes[i] = { ...scenes[i], generatedAudio: { url: data.audioUrl, text: scene.narration, voiceId: voiceTone, duration: data.duration } };
             return { ...prev, scenes };
           });
           setSceneStatuses((prev) => { const n = [...prev]; n[i] = { ...n[i], voiceStatus: 'complete' }; return n; });
@@ -816,28 +716,19 @@ export default function CreatePage() {
         }
       }));
 
-      // 4. Videos (parallel submit — duration synced to narration length)
+      // 4. Submit video jobs in parallel (duration synced to narration)
       setGenStage('videos');
       const videoJobs: Array<{ sceneIndex: number; requestId: string }> = [];
 
-      console.log(`[Pipeline] Submitting ${sceneImageUrls.size} video jobs from ${ep.scenes.length} scenes`);
-
       await Promise.all(ep.scenes.map(async (scene: typeof ep.scenes[0], i: number) => {
         const imageUrl = sceneImageUrls.get(i);
-        if (!imageUrl) {
-          console.warn(`[Pipeline] No image for scene ${i}, skipping video`);
-          return;
-        }
+        if (!imageUrl) return;
 
         setSceneStatuses((prev) => { const n = [...prev]; n[i] = { ...n[i], videoStatus: 'generating' }; return n; });
 
         const videoPrompt = buildSceneVideoPrompt(scene, fullProfile, undefined, characterRefUrl);
-
-        // Choose video duration based on narration length
-        // Kling supports 5s or 10s — pick 10s if narration > 7 seconds
         const audioDuration = sceneAudioDurations.get(i) || 5;
         const videoDuration = audioDuration > 7 ? 10 : 5;
-        console.log(`[Pipeline] Scene ${i}: audio ${audioDuration}s → video ${videoDuration}s`);
 
         try {
           const resp = await fetch('/api/video', {
@@ -848,23 +739,18 @@ export default function CreatePage() {
           const data = await resp.json();
           if (!resp.ok) throw new Error(data.error);
 
-          console.log(`[Pipeline] Video job submitted for scene ${i}: ${data.requestId}`);
           videoJobs.push({ sceneIndex: i, requestId: data.requestId });
-          setSceneStatuses((prev) => { const n = [...prev]; n[i] = { ...n[i], videoRequestId: data.requestId }; return n; });
         } catch (err) {
           console.error(`Video submit error scene ${i}:`, err);
           setSceneStatuses((prev) => { const n = [...prev]; n[i] = { ...n[i], videoStatus: 'error' }; return n; });
         }
       }));
 
-      // 5. Poll all video jobs until complete
+      // 5. Poll video jobs
       const pending = new Set(videoJobs.map((j) => j.sceneIndex));
       let attempts = 0;
-      const maxAttempts = 150; // ~12.5 min
 
-      console.log(`[Pipeline] Polling ${pending.size} video jobs...`);
-
-      while (pending.size > 0 && attempts < maxAttempts) {
+      while (pending.size > 0 && attempts < 150) {
         await new Promise((r) => setTimeout(r, 5000));
         attempts++;
 
@@ -876,47 +762,66 @@ export default function CreatePage() {
 
             if (data.status === 'COMPLETED' && data.videoUrl) {
               pending.delete(job.sceneIndex);
-              console.log(`[Pipeline] Video complete for scene ${job.sceneIndex}`);
-              // Upload video to permanent storage
-              const permanentVideoUrl = await uploadAssetToStorage(data.videoUrl, 'video', ep.id, job.sceneIndex);
+              const permanentUrl = await uploadAsset(data.videoUrl, 'video', ep.id, job.sceneIndex);
 
               setEpisode((prev) => {
                 if (!prev) return null;
                 const scenes = [...prev.scenes];
-                scenes[job.sceneIndex] = { ...scenes[job.sceneIndex], generatedVideo: { url: permanentVideoUrl, duration: 5, prompt: 'generated' } };
+                scenes[job.sceneIndex] = { ...scenes[job.sceneIndex], generatedVideo: { url: permanentUrl, duration: 5, prompt: 'generated' } };
                 return { ...prev, scenes };
               });
               setSceneStatuses((prev) => { const n = [...prev]; n[job.sceneIndex] = { ...n[job.sceneIndex], videoStatus: 'complete' }; return n; });
             } else if (data.status === 'FAILED') {
               pending.delete(job.sceneIndex);
-              console.error(`[Pipeline] Video FAILED for scene ${job.sceneIndex}`);
               setSceneStatuses((prev) => { const n = [...prev]; n[job.sceneIndex] = { ...n[job.sceneIndex], videoStatus: 'error' }; return n; });
             }
           } catch (err) {
-            console.error(`Video poll error:`, err);
+            console.error('Video poll error:', err);
           }
         }
       }
 
+      // Mark timed-out jobs as error
       for (const idx of pending) {
         setSceneStatuses((prev) => { const n = [...prev]; n[idx] = { ...n[idx], videoStatus: 'error' }; return n; });
       }
 
-      // Save episode with permanent asset URLs (use ep.id since React state may be stale)
-      try {
-        // Get the latest episode state by reading from the setter
-        let latestEpisode: Episode | null = null;
-        setEpisode((prev) => { latestEpisode = prev; return prev; });
-        if (latestEpisode) {
-          await fetch('/api/episodes/' + ep.id, {
+      // 6. Auto-save episode to history and Blob storage
+      let latestEpisode: Episode | null = null;
+      setEpisode((prev) => { latestEpisode = prev; return prev; });
+
+      if (latestEpisode) {
+        // Save to localStorage history
+        const le = latestEpisode as Episode;
+        const saved: SavedEpisode = {
+          id: le.id,
+          title: le.title,
+          topic: selectedTopic,
+          childName: le.childProfile?.name || profile.name,
+          provider,
+          createdAt: new Date().toISOString(),
+          thumbnail: le.scenes[0]?.generatedImage?.url,
+          scenes: le.scenes.map((s, i) => ({
+            index: i,
+            narration: s.narration,
+            videoUrl: s.generatedVideo?.url,
+            audioUrl: s.generatedAudio?.url,
+            imageUrl: s.generatedImage?.url,
+          })),
+        };
+        saveEpisodeToHistory(saved);
+        console.log('[Pipeline] Episode auto-saved to history');
+
+        // Save to Blob API
+        try {
+          await fetch('/api/episodes/' + le.id, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(latestEpisode),
+            body: JSON.stringify(le),
           });
-          console.log('[API] Episode saved with permanent asset URLs');
+        } catch (err) {
+          console.warn('[Pipeline] Blob save failed:', err);
         }
-      } catch (err) {
-        console.error('[API] Failed to save episode:', err);
       }
 
       setGenStage('done');
@@ -935,7 +840,9 @@ export default function CreatePage() {
         <div className="max-w-md bg-red-500/10 border border-red-500/30 rounded-2xl p-8 text-center">
           <p className="text-red-400 font-bold text-lg mb-2">Something went wrong</p>
           <p className="text-red-300 text-sm mb-6">{error}</p>
-          <button onClick={() => { setError(null); setStage('topic'); }} className="px-6 py-3 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-all">Try again</button>
+          <button onClick={() => { setError(null); setStage('topic'); }} className="px-6 py-3 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-all">
+            Try again
+          </button>
         </div>
       </div>
     );
@@ -956,18 +863,38 @@ export default function CreatePage() {
   }
 
   if (stage === 'topic') {
-    const profileSummary = `Age ${profile.age} · ${profile.avatar.hairColor} ${profile.avatar.hairStyle} hair · ${profile.avatar.skinTone} skin · ${profile.avatar.favoriteOutfit}`;
     return (
-      <TopicInput profileName={profile.name} profileAge={profile.age} profileSummary={profileSummary} onSubmit={handleTopicSubmit} onChangeProfile={() => { setProfile(null); setStage('setup'); }} isLoading={false} provider={provider} onProviderChange={setProvider} onPresetSelect={handlePresetSelect} />
+      <TopicInput
+        profile={profile}
+        onSubmit={handleTopicSubmit}
+        isLoading={false}
+        provider={provider}
+        onProviderChange={setProvider}
+        onPresetSelect={handlePresetSelect}
+      />
     );
   }
 
   if (stage === 'generating') {
-    return <GenerationProgress stage={genStage} topic={topic} sceneCount={5} sceneStatuses={sceneStatuses} provider={provider} sceneTitles={episode?.scenes.map(s => s.title)} sceneThumbnails={episode?.scenes.map(s => s.generatedImage?.url)} />;
+    return (
+      <GenerationProgress
+        stage={genStage}
+        topic={topic}
+        sceneStatuses={sceneStatuses}
+        provider={provider}
+        sceneTitles={episode?.scenes.map((s) => s.title)}
+        sceneThumbnails={episode?.scenes.map((s) => s.generatedImage?.url)}
+      />
+    );
   }
 
   if (stage === 'playing' && episode) {
-    return <VideoPlayer episode={episode} onBack={() => { setStage('topic'); setEpisode(null); setGenStage('story'); }} />;
+    return (
+      <EpisodePlayer
+        episode={episode}
+        onBack={() => { setStage('topic'); setEpisode(null); setGenStage('story'); }}
+      />
+    );
   }
 
   return null;

@@ -11,13 +11,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Text required' }, { status: 400 });
     }
 
+    if (!process.env.ELEVENLABS_API_KEY) {
+      console.error('[Voice] ELEVENLABS_API_KEY not set');
+      return NextResponse.json(
+        { error: 'ELEVENLABS_API_KEY not configured. Add it to Vercel environment variables.' },
+        { status: 500 }
+      );
+    }
+
     const result = await generateVoiceNarration(text, voiceTone);
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Voice generation error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Voice generation failed' },
-      { status: 500 }
-    );
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error('[Voice] Error:', errMsg);
+    return NextResponse.json({ error: errMsg || 'Voice generation failed' }, { status: 500 });
   }
 }
