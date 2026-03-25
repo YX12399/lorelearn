@@ -1,16 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
-import path from 'path';
-
-const EPISODES_DIR = '/tmp/episodes';
-
-async function ensureEpisodesDir() {
-  try {
-    await fs.mkdir(EPISODES_DIR, { recursive: true });
-  } catch (error) {
-    console.error('Failed to create episodes directory:', error);
-  }
-}
+import { put } from '@vercel/blob';
 
 export async function GET(
   request: NextRequest,
@@ -18,18 +7,20 @@ export async function GET(
 ) {
   try {
     const { id: episodeId } = await params;
-    const episodeFile = path.join(EPISODES_DIR, episodeId + '.json');
-
-    const fileContent = await fs.readFile(episodeFile, 'utf-8');
-    const episode = JSON.parse(fileContent);
-
+    
+    // Try to fetch from Blob storage
+    const blobUrl = `https://bz2i3tmv6dixo6u6.public.blob.vercel-storage.com/episodes/${episodeId}.json`;
+    const resp = await fetch(blobUrl, { cache: 'no-store' });
+    
+    if (!resp.ok) {
+      return NextResponse.json({ error: 'Episode not found' }, { status: 404 });
+    }
+    
+    const episode = await resp.json();
     return NextResponse.json(episode);
   } catch (error) {
-    console.error('[Episodes API] Error reading episode:', error);
-    return NextResponse.json(
-      { error: 'Episode not found' },
-      { status: 404 }
-    );
+    console.error('[Episodes] GET error:', error);
+    return NextResponse.json({ error: 'Episode not found' }, { status: 404 });
   }
 }
 
@@ -41,17 +32,17 @@ export async function POST(
     const { id: episodeId } = await params;
     const episode = await request.json();
 
-    await ensureEpisodesDir();
+    const blob = await put(`episodes/${episodeId}.json`, JSON.stringify(episode), {
+      access: 'public',
+      contentType: 'application/json',
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+      addRandomSuffix: false,
+    });
 
-    const episodeFile = path.join(EPISODES_DIR, episodeId + '.json');
-    await fs.writeFile(episodeFile, JSON.stringify(episode, null, 2));
-
-    return NextResponse.json({ success: true, episodeId });
+    console.log(`[Episodes] Saved ${episodeId} to Blob: ${blob.url}`);
+    return NextResponse.json({ success: true, episodeId, url: blob.url });
   } catch (error) {
-    console.error('[Episodes API] Error saving episode:', error);
-    return NextResponse.json(
-      { error: 'Failed to save episode' },
-      { status: 500 }
-    );
+    console.error('[Episodes] POST error:', error);
+    return NextResponse.json({ error: 'Failed to save episode' }, { status: 500 });
   }
 }

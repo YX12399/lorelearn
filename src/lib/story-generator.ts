@@ -3,9 +3,7 @@ import { ChildProfile, Episode, Scene } from '@/types';
 import { buildContinuityBible } from './cohesion';
 
 export async function generateEpisode(profile: ChildProfile): Promise<Episode> {
-  const client = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  });
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const prompt = buildSceneDirectorPrompt(profile);
 
   const message = await client.messages.create({
@@ -15,7 +13,7 @@ export async function generateEpisode(profile: ChildProfile): Promise<Episode> {
   });
 
   const content = message.content[0];
-  if (content.type !== 'text') throw new Error('Unexpected response type from Claude');
+  if (content.type !== 'text') throw new Error('Unexpected response type');
 
   return parseEpisodeResponse(content.text, profile);
 }
@@ -29,73 +27,77 @@ function buildSceneDirectorPrompt(profile: ChildProfile): string {
     `wearing ${avatar.favoriteOutfit}`,
   ].join(', ');
 
-  return `You are a cinematic scene director creating an animated educational video about "${learningTopic}" for ${name}, age ${age}.
+  return `You are a master children's educator AND cinematic scene director.
 
-YOUR TASK: Plan 5 scenes for a beautiful animated explainer video. Each scene will be:
-1. Rendered as a high-quality AI image
-2. Animated into a 5–10 second video clip
-3. Overlaid with warm voice narration
-4. Played sequentially as a cohesive learning experience
+TASK: Create an animated educational video about "${learningTopic}" for ${name}, age ${age}.
 
-THE CHILD (appears in every scene):
+CRITICAL EDUCATIONAL APPROACH:
+A ${age}-year-old doesn't have background knowledge adults take for granted.
+Before explaining "${learningTopic}", you MUST build up from foundational concepts.
+
+For example:
+- "Why is the sky blue?" → First explain: what is light? → light is made of colors → colors travel in waves → small things scatter short waves → blue light scatters most → that's why the sky is blue!
+- "How do volcanoes erupt?" → First explain: the Earth has layers → deep inside is very hot melted rock → pressure builds up → it pushes through cracks → BOOM, volcano!
+- "Why do we dream?" → First explain: your brain is always working → when you sleep it sorts memories → sometimes it plays them like movies → those movies are dreams!
+
+Plan your 5 scenes as a LEARNING JOURNEY from zero knowledge to understanding:
+- Scene 1 FOUNDATION: Introduce the most basic building-block concept (with wonder and beauty)
+- Scene 2 BUILDING: Add the next layer of understanding with a vivid visual metaphor  
+- Scene 3 KEY CONCEPT: The central mechanism/process, shown dramatically
+- Scene 4 CONNECTION: Link it to ${name}'s world — use their interests (${interests.animals.join(', ') || 'animals'}, ${interests.specialInterests.join(', ') || 'exploring'})
+- Scene 5 AHA MOMENT: The full picture clicks — ${name} now understands ${learningTopic}!
+
+THE CHILD CHARACTER (appears in EVERY scene):
 ${characterDesc}
 
-THEIR WORLD (weave naturally into the visuals):
-- Animals they love: ${interests.animals.join(', ') || 'various animals'}
-- Favorite colors: ${interests.colors.join(', ') || 'bright colors'}
-- Special interests: ${interests.specialInterests.join(', ') || 'exploring and learning'}
-- Favorite places: ${interests.places.join(', ') || 'outdoors'}
+THEIR WORLD (weave naturally into visuals):
+- Animals: ${interests.animals.join(', ') || 'various animals'}
+- Colors: ${interests.colors.join(', ') || 'bright colors'}
+- Special interests: ${interests.specialInterests.join(', ') || 'exploring'}
+- Places: ${interests.places.join(', ') || 'outdoors'}
 
-PACING: ${sensoryPreferences.preferredPace} · Audio sensitivity: ${sensoryPreferences.audioSensitivity}
+NARRATION RULES (this is a warm voiceover — NOT describing actions):
+1. TEACH the concept — explain the science/how/why
+2. Use simple words a ${age}-year-old would understand
+3. 2-3 sentences per scene, each sentence adds understanding
+4. Use ${name}'s name naturally  
+5. Ask a wonder question occasionally ("Have you ever noticed...?", "Isn't that amazing?")
+6. Pacing: ${sensoryPreferences.preferredPace}
 
-VISUAL PROMPT RULES (critical — this text generates the actual image):
-1. EVERY visualPrompt MUST begin with: "${characterDesc}"
-2. Describe ONE frozen moment — single camera angle, single action
-3. Include: lighting, color palette, depth of field, atmosphere
-4. Include: character pose, expression, hand position
-5. Include: background details and environmental storytelling
-6. Include: subtle motion cues (wind in hair, floating particles, rippling water)
-7. End every prompt with: "Studio Ghibli inspired, lush painted backgrounds, warm cinematic lighting, soft watercolor textures, 16:9 widescreen, masterpiece quality."
-8. Each prompt is SELF-CONTAINED — never reference other scenes
-9. 120–180 words of pure visual detail
+VISUAL PROMPT RULES (this text generates the actual AI image):
+1. EVERY prompt starts with: "${characterDesc}"
+2. Describe ONE frozen cinematic moment
+3. Include: character pose, expression, what they're looking at
+4. Include: lighting, color palette, atmospheric effects
+5. Include: background environment with educational visual metaphors
+6. End EVERY prompt with: "Studio Ghibli anime style, lush painted backgrounds, warm cinematic lighting, soft watercolor textures, 16:9 widescreen, masterpiece quality, no text."
+7. Each prompt is 120-180 words and SELF-CONTAINED
+8. Character looks IDENTICAL across all scenes
 
-NARRATION RULES (warm voiceover explaining the topic):
-1. Explain the science/concept — don't describe actions
-2. Write as a warm, enthusiastic educator — like the best science show host for kids
-3. 2–3 sentences per scene, building understanding progressively
-4. Use ${name}'s name to keep it personal
-5. Match the ${sensoryPreferences.preferredPace} pacing preference
+ANIMATION DIRECTION (guides video generation):
+1. What MOVES: character gestures, environmental motion, camera movement
+2. Keep motion gentle, purposeful, cinematic
+3. Include specific actions: "slowly reaches out", "light beams dance across"
 
-ANIMATION DIRECTION (guides how the image becomes video):
-1. Describe what MOVES: character gestures, environmental motion
-2. Keep motion gentle and purposeful
-3. Examples: "Character slowly looks up in wonder", "Leaves drift gently across frame"
-
-EPISODE ARC:
-- Scene 1 WONDER: ${name} encounters something amazing about ${learningTopic}
-- Scene 2 FOUNDATIONS: Explain the first core concept visually
-- Scene 3 DEEP DIVE: The key concept with a rich visual metaphor
-- Scene 4 CONNECTION: How this relates to ${name}'s world and interests
-- Scene 5 REVELATION: The "aha!" moment — ${name} understands and it's beautiful
-
-Respond with ONLY valid JSON (no markdown, no code fences):
+Respond with ONLY valid JSON (no markdown fences):
 {
-  "title": "Engaging episode title",
-  "learningObjective": "One sentence: what ${name} will understand",
+  "title": "Engaging episode title about ${learningTopic}",
+  "learningObjective": "What ${name} will understand after watching",
+  "conceptJourney": ["concept 1 (foundation)", "concept 2 (building)", "concept 3 (key)", "concept 4 (connection)", "concept 5 (aha)"],
   "scenes": [
     {
       "index": 0,
       "title": "Scene title",
-      "narration": "Educational voiceover, 2-3 sentences",
+      "narration": "Educational voiceover, 2-3 sentences teaching a concept",
       "dialogue": [],
       "emotionBeat": {
         "primaryEmotion": "wonder",
         "zone": "green",
         "intensity": 6,
-        "teachingMoment": "Brief emotional insight"
+        "teachingMoment": "What concept this scene teaches"
       },
-      "visualPrompt": "Full cinematic description starting with character...",
-      "animationDirection": "What moves and how",
+      "visualPrompt": "Full cinematic image description starting with character...",
+      "animationDirection": "What moves and how in the video",
       "transitionType": "crossfade",
       "duration": 8
     }
@@ -108,7 +110,7 @@ function parseEpisodeResponse(text: string, profile: ChildProfile): Episode {
   if (!jsonMatch) throw new Error('No JSON found in Claude response');
 
   const data = JSON.parse(jsonMatch[0]);
-  const episodeId = `episode-${Date.now()}`;
+  const episodeId = `ep-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
   const scenes: Scene[] = data.scenes.map(
     (s: Record<string, unknown>, index: number) => ({
@@ -119,14 +121,13 @@ function parseEpisodeResponse(text: string, profile: ChildProfile): Episode {
       dialogue: s.dialogue || [],
       emotionBeat: s.emotionBeat,
       visualPrompt: s.visualPrompt,
-      animationDirection: (s.animationDirection as string) || '',
       interactiveMoment: s.interactiveMoment || undefined,
       duration: (s.duration as number) || 8,
       transitionType: s.transitionType || 'crossfade',
     })
   );
 
-  const episode: Episode = {
+  return {
     id: episodeId,
     childProfile: profile,
     title: data.title,
@@ -136,6 +137,4 @@ function parseEpisodeResponse(text: string, profile: ChildProfile): Episode {
     status: 'planning',
     continuityBible: buildContinuityBible(scenes, profile, undefined, episodeId),
   };
-
-  return episode;
 }
