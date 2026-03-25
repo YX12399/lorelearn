@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     // Submit video generation
     let operation = await ai.models.generateVideos({
-      model: 'veo-3-generate-preview',
+      model: 'veo-3.0-generate-preview',
       prompt,
       config: {
         numberOfVideos: 1,
