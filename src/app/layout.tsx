@@ -2,14 +2,14 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'LoreLearn — AI Learning Adventures',
-  description: 'AI-powered educational episodes for curious kids',
+  title: 'LoreLearn',
+  description: 'Describe a concept, get an AI-generated explainer video',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen">{children}</body>
+      <body>{children}</body>
     </html>
   );
 }
