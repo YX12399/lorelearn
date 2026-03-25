@@ -129,7 +129,7 @@ export default function Home() {
                   className="w-full px-3 py-2 rounded-lg text-sm"
                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
                 >
-                  <option value={5}>5 seconds</option>
+                  <option value={6}>6 seconds</option>
                   <option value={8}>8 seconds</option>
                 </select>
               </div>

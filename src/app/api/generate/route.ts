@@ -4,6 +4,9 @@ import { put } from '@vercel/blob';
 
 export const maxDuration = 300; // 5 minutes for video generation
 
+// Veo 3 only accepts 4, 6, or 8 second durations
+const VALID_DURATIONS = [4, 6, 8];
+
 export async function POST(req: NextRequest) {
   try {
     const { prompt, duration, aspectRatio } = await req.json();
@@ -19,7 +22,9 @@ export async function POST(req: NextRequest) {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    const durationSec = duration || 8;
+    // Clamp to nearest valid Veo 3 duration (4, 6, or 8)
+    const rawDur = Number(duration) || 8;
+    const durationSec = VALID_DURATIONS.includes(rawDur) ? rawDur : 8;
 
     console.log('[Generate] Starting Veo 3 video generation...');
     console.log('[Generate] Prompt:', prompt.slice(0, 100) + '...');
