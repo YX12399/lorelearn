@@ -1,48 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { put } from '@vercel/blob';
 
+export const maxDuration = 15;
+
+// GET: Load episode from Vercel Blob
 export async function GET(
-  request: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: episodeId } = await params;
+    const { id } = await params;
     
-    // Try to fetch from Blob storage
-    const blobUrl = `https://bz2i3tmv6dixo6u6.public.blob.vercel-storage.com/episodes/${episodeId}.json`;
-    const resp = await fetch(blobUrl, { cache: 'no-store' });
-    
-    if (!resp.ok) {
+    // Fetch directly from blob store
+    const blobUrl = `https://bz2i3tmv6dixo6u6.public.blob.vercel-storage.com/episodes/${id}.json`;
+    const response = await fetch(blobUrl, { cache: 'no-store' });
+
+    if (!response.ok) {
       return NextResponse.json({ error: 'Episode not found' }, { status: 404 });
     }
-    
-    const episode = await resp.json();
+
+    const episode = await response.json();
     return NextResponse.json(episode);
-  } catch (error) {
-    console.error('[Episodes] GET error:', error);
-    return NextResponse.json({ error: 'Episode not found' }, { status: 404 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to load episode';
+    console.error('[Episodes GET]', message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
+// POST: Save episode to Vercel Blob
 export async function POST(
-  request: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: episodeId } = await params;
-    const episode = await request.json();
+    const { id } = await params;
+    const episode = await req.json();
 
-    const blob = await put(`episodes/${episodeId}.json`, JSON.stringify(episode), {
-      access: 'public',
-      contentType: 'application/json',
-      token: process.env.BLOB_READ_WRITE_TOKEN,
-      addRandomSuffix: false,
-    });
+    if (!episode || !episode.title || !episode.scenes) {
+      return NextResponse.json({ error: 'Invalid episode data' }, { status: 400 });
+    }
 
-    console.log(`[Episodes] Saved ${episodeId} to Blob: ${blob.url}`);
-    return NextResponse.json({ success: true, episodeId, url: blob.url });
-  } catch (error) {
-    console.error('[Episodes] POST error:', error);
-    return NextResponse.json({ error: 'Failed to save episode' }, { status: 500 });
+    // Ensure the ID is set
+    episode.id = id;
+
+    const blob = await put(
+      `episodes/${id}.json`,
+      JSON.stringify(episode),
+      { access: 'public', addRandomSuffix: false, contentType: 'application/json' }
+    );
+
+    console.log(`[Episodes] Saved episode ${id} to blob: ${blob.url}`);
+    return NextResponse.json({ url: blob.url, id });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to save episode';
+    console.error('[Episodes POST]', message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

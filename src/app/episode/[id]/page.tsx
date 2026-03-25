@@ -1,172 +1,203 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { Episode } from '@/types';
+import { useParams } from 'next/navigation';
+import type { Episode } from '../../../types';
 
-export default function EpisodeViewerPage({ params }: { params: { id: string } }) {
+export default function EpisodePage() {
+  const params = useParams();
+  const episodeId = params.id as string;
   const [episode, setEpisode] = useState<Episode | null>(null);
-  const [currentScene, setCurrentScene] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const [currentScene, setCurrentScene] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
   const audioRefs = useRef<(HTMLAudioElement | null)[]>([]);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Load episode from Blob
   useEffect(() => {
-    (async () => {
+    async function load() {
       try {
-        const resp = await fetch('/api/episodes/' + params.id);
-        if (!resp.ok) throw new Error('Episode not found');
-        setEpisode(await resp.json());
-      } catch (err) {
+        const res = await fetch(`/api/episodes/${episodeId}`);
+        if (!res.ok) throw new Error('Episode not found');
+        const data = await res.json();
+        setEpisode(data);
+      } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to load');
       } finally {
         setLoading(false);
       }
-    })();
-  }, [params.id]);
+    }
+    load();
+  }, [episodeId]);
 
-  // Init audio when episode loads
+  // Initialize audio
   useEffect(() => {
     if (!episode) return;
-    const scenes = episode.scenes.filter((s) => s.generatedVideo?.url || s.generatedImage?.url);
-    audioRefs.current = scenes.map((s) => {
-      if (!s.generatedAudio?.url) return null;
-      const audio = new Audio();
-      audio.preload = 'auto';
-      audio.src = s.generatedAudio.url;
-      return audio;
+
+    const elements: (HTMLAudioElement | null)[] = [];
+    episode.scenes.forEach((s, i) => {
+      if (s.audioUrl) {
+        const audio = new Audio();
+        audio.preload = 'auto';
+        audio.crossOrigin = 'anonymous';
+        audio.src = s.audioUrl;
+        elements[i] = audio;
+      } else {
+        elements[i] = null;
+      }
     });
-    return () => { audioRefs.current.forEach((a) => { if (a) { a.pause(); a.removeAttribute('src'); a.load(); } }); };
+    audioRefs.current = elements;
+
+    return () => {
+      elements.forEach(a => { if (a) { a.pause(); a.removeAttribute('src'); a.load(); } });
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [episode]);
+
+  const playCurrentAudio = useCallback(() => {
+    audioRefs.current.forEach(a => { if (a) { a.pause(); a.currentTime = 0; } });
+    const audio = audioRefs.current[currentScene];
+    if (audio) {
+      audio.currentTime = 0;
+      audio.play().catch(err => console.warn('[Audio] Play failed:', err));
+    }
+  }, [currentScene]);
+
+  useEffect(() => {
+    if (!isPlaying || !episode) return;
+
+    playCurrentAudio();
+    const duration = (episode.scenes[currentScene]?.duration || 8) * 1000;
+    timerRef.current = setTimeout(() => {
+      if (currentScene < episode.scenes.length - 1) {
+        setCurrentScene(prev => prev + 1);
+      } else {
+        setIsPlaying(false);
+      }
+    }, duration);
+
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [isPlaying, currentScene, playCurrentAudio, episode]);
+
+  const goToScene = (index: number) => {
+    audioRefs.current.forEach(a => { if (a) { a.pause(); a.currentTime = 0; } });
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setCurrentScene(index);
+  };
+
+  const togglePlay = () => {
+    if (isPlaying) {
+      audioRefs.current.forEach(a => { if (a) a.pause(); });
+      if (timerRef.current) clearTimeout(timerRef.current);
+      setIsPlaying(false);
+    } else {
+      setIsPlaying(true);
+    }
+  };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-purple-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-white text-lg">Loading episode...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="loading-pulse text-xl" style={{ color: 'var(--text-muted)' }}>Loading episode...</div>
       </div>
     );
   }
 
   if (error || !episode) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 flex items-center justify-center p-6">
-        <div className="text-center max-w-md">
-          <h1 className="text-3xl font-bold text-white mb-4">Episode not found</h1>
-          <p className="text-purple-300 mb-6">{error || 'This episode may have been deleted.'}</p>
-          <Link href="/create" className="px-6 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600">Create New</Link>
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <div className="text-4xl">&#x1F614;</div>
+        <p style={{ color: 'var(--error)' }}>{error || 'Episode not found'}</p>
+        <Link href="/create" className="px-4 py-2 rounded-xl text-sm" style={{ background: 'var(--accent)', color: '#fff' }}>
+          Create a new episode
+        </Link>
       </div>
     );
   }
 
-  const playableScenes = episode.scenes.filter((s) => s.generatedVideo?.url || s.generatedImage?.url);
-  const scene = playableScenes[currentScene];
-  const hasVideo = !!scene?.generatedVideo?.url;
-  const isSlideshow = !playableScenes.some((s) => s.generatedVideo?.url);
-
-  if (!scene) return null;
-
-  const playScene = () => {
-    setIsPlaying(true);
-    if (hasVideo && videoRef.current) videoRef.current.play().catch(() => {});
-    const audio = audioRefs.current[currentScene];
-    if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
-  };
-
-  const pauseScene = () => {
-    setIsPlaying(false);
-    if (videoRef.current) videoRef.current.pause();
-    audioRefs.current[currentScene]?.pause();
-  };
-
-  const advanceScene = () => {
-    if (currentScene < playableScenes.length - 1) {
-      const next = currentScene + 1;
-      audioRefs.current.forEach((a) => { if (a) { a.pause(); a.currentTime = 0; } });
-      setCurrentScene(next);
-      setTimeout(() => {
-        if (videoRef.current) videoRef.current.play().catch(() => {});
-        const a = audioRefs.current[next];
-        if (a) { a.currentTime = 0; a.play().catch(() => {}); }
-      }, 300);
-    } else {
-      setIsPlaying(false);
-    }
-  };
-
-  const goToScene = (i: number) => {
-    audioRefs.current.forEach((a) => { if (a) { a.pause(); a.currentTime = 0; } });
-    setCurrentScene(i);
-    setIsPlaying(false);
-  };
+  const scene = episode.scenes[currentScene];
 
   return (
-    <div className="min-h-screen bg-black flex flex-col">
-      <div className="flex-1 relative flex items-center justify-center">
-        {hasVideo ? (
-          <video ref={videoRef} key={scene.generatedVideo?.url} src={scene.generatedVideo?.url}
-            className="max-w-full max-h-[70vh] rounded-lg"
-            onEnded={advanceScene} onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)} playsInline />
-        ) : scene.generatedImage?.url ? (
-          <img src={scene.generatedImage.url} alt={scene.title} className="max-w-full max-h-[70vh] rounded-lg object-contain" />
-        ) : null}
-
-        {!isPlaying && (
-          <button onClick={playScene} className="absolute inset-0 flex items-center justify-center bg-black/40">
-            <div className="w-20 h-20 bg-white/20 backdrop-blur-xl rounded-full flex items-center justify-center hover:bg-white/30">
-              <svg className="w-10 h-10 text-white ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-            </div>
-          </button>
-        )}
-        {isPlaying && (
-          <button onClick={pauseScene} className="absolute top-4 right-4 w-10 h-10 bg-black/50 backdrop-blur rounded-full flex items-center justify-center hover:bg-black/70">
-            <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
-          </button>
-        )}
-
-        {isSlideshow && playableScenes.length > 1 && (
-          <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 flex justify-between px-4 pointer-events-none">
-            {currentScene > 0 ? (
-              <button onClick={() => goToScene(currentScene - 1)} className="pointer-events-auto w-10 h-10 bg-black/50 backdrop-blur rounded-full flex items-center justify-center hover:bg-black/70">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-              </button>
-            ) : <div />}
-            {currentScene < playableScenes.length - 1 ? (
-              <button onClick={() => goToScene(currentScene + 1)} className="pointer-events-auto w-10 h-10 bg-black/50 backdrop-blur rounded-full flex items-center justify-center hover:bg-black/70">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-              </button>
-            ) : <div />}
-          </div>
-        )}
-
-        <div className="absolute bottom-4 left-4 right-4">
-          <div className="bg-black/70 backdrop-blur-sm rounded-xl px-6 py-3 text-center">
-            <p className="text-white text-sm leading-relaxed">{scene.narration}</p>
-          </div>
+    <div className="min-h-screen flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3" style={{ background: 'var(--surface)' }}>
+        <div>
+          <h1 className="text-lg font-bold">{episode.title}</h1>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            Scene {currentScene + 1} of {episode.scenes.length}: {scene.title}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Link href="/history" className="px-3 py-1.5 rounded-lg text-sm" style={{ background: 'var(--surface-hover)', color: 'var(--text-muted)' }}>
+            History
+          </Link>
+          <Link href="/create" className="px-3 py-1.5 rounded-lg text-sm" style={{ background: 'var(--accent)', color: '#fff' }}>
+            New Topic
+          </Link>
         </div>
       </div>
 
-      <div className="bg-gradient-to-t from-black to-transparent p-6">
-        <div className="max-w-3xl mx-auto">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-white font-bold text-lg">{episode.title}</h2>
-            <span className="text-purple-400 text-sm">{isSlideshow && '📸 '}Scene {currentScene + 1}/{playableScenes.length}</span>
+      {/* Scene */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-4">
+        <div className="w-full max-w-3xl">
+          <div
+            className="relative rounded-2xl overflow-hidden slide-enter"
+            style={{ aspectRatio: '16/9', background: 'var(--surface)' }}
+            key={currentScene}
+          >
+            {scene.videoUrl ? (
+              <video src={scene.videoUrl} className="absolute inset-0 w-full h-full object-cover" autoPlay muted loop playsInline />
+            ) : scene.imageUrl ? (
+              <img src={scene.imageUrl} alt={scene.title} className="absolute inset-0 w-full h-full object-cover" />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center" style={{ color: 'var(--text-muted)' }}>No image</div>
+            )}
+            <div className="absolute bottom-0 left-0 right-0 px-4 py-3" style={{ background: 'linear-gradient(transparent, rgba(0,0,0,0.7))' }}>
+              <p className="text-white text-sm font-medium">{scene.title}</p>
+            </div>
           </div>
-          <div className="flex gap-2 justify-center mb-4">
-            {playableScenes.map((_, i) => (
-              <button key={i} onClick={() => goToScene(i)}
-                className={`h-1.5 rounded-full transition-all ${i === currentScene ? 'w-8 bg-purple-400' : i < currentScene ? 'w-4 bg-green-500' : 'w-4 bg-white/20'}`} />
+
+          <div className="mt-3 px-2">
+            <p className="text-base leading-relaxed">{scene.narration}</p>
+          </div>
+
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <button
+              onClick={() => goToScene(Math.max(0, currentScene - 1))}
+              disabled={currentScene === 0}
+              className="px-4 py-2 rounded-lg text-sm"
+              style={{ background: 'var(--surface)', opacity: currentScene === 0 ? 0.5 : 1 }}
+            >
+              &#9664; Prev
+            </button>
+            <button onClick={togglePlay} className="px-6 py-2 rounded-lg text-sm font-semibold" style={{ background: 'var(--accent)', color: '#fff' }}>
+              {isPlaying ? '&#9646;&#9646; Pause' : '&#9654; Play'}
+            </button>
+            <button
+              onClick={() => goToScene(Math.min(episode.scenes.length - 1, currentScene + 1))}
+              disabled={currentScene === episode.scenes.length - 1}
+              className="px-4 py-2 rounded-lg text-sm"
+              style={{ background: 'var(--surface)', opacity: currentScene === episode.scenes.length - 1 ? 0.5 : 1 }}
+            >
+              Next &#9654;
+            </button>
+          </div>
+
+          <div className="flex justify-center gap-2 mt-3">
+            {episode.scenes.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => goToScene(i)}
+                className="w-3 h-3 rounded-full transition-all"
+                style={{
+                  background: i === currentScene ? 'var(--accent)' : 'var(--surface-hover)',
+                  transform: i === currentScene ? 'scale(1.3)' : 'scale(1)',
+                }}
+              />
             ))}
-          </div>
-          <div className="flex justify-center">
-            <Link href="/create" className="px-6 py-2 bg-purple-500/20 text-purple-300 rounded-lg hover:bg-purple-500/30 text-sm">
-              Create Your Own
-            </Link>
           </div>
         </div>
       </div>
